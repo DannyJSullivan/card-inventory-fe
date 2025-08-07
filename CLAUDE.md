@@ -2,6 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+<<<<<<< HEAD
 # Claude Development Guidelines
 
 ## Project Context
@@ -177,3 +178,205 @@ src/
 - Barcode/QR code scanning for mobile
 - Integration with card pricing APIs
 - Social features for trading and sharing collections
+=======
+## Project Overview
+
+This is a FastAPI-based backend application for managing baseball card collections and inventories. **Currently in early development stage** - only user authentication is implemented. The full card inventory system is planned but not yet built.
+
+## Implementation Status
+
+### ✅ Currently Implemented
+- User authentication system (register, login, JWT tokens)
+- FastAPI application structure with routers/services/models separation
+- SQLAlchemy database setup with Alembic migrations
+- Pydantic schema validation
+- Basic security (password hashing, JWT tokens)
+
+### 🚧 Planned (Not Yet Implemented)
+- Card-related models (Brand, Set, Card, Player, Team, Parallel)
+- Collection and inventory management
+- Card CRUD operations
+- Advanced search and filtering
+- All business logic beyond authentication
+
+## Development Commands
+
+### Environment Setup
+- **Create virtual environment**: `python -m venv venv`
+- **Activate virtual environment**: 
+  - Unix/Mac: `source venv/bin/activate`
+  - Windows: `venv\Scripts\activate`
+- **Install dependencies**: `pip install -r requirements.txt`
+
+### Database Operations
+- **Create new migration**: `alembic revision --autogenerate -m "description"`
+- **Apply migrations**: `alembic upgrade head`
+- **Rollback migration**: `alembic downgrade -1`
+- **Show migration history**: `alembic history`
+
+### Development Server
+- **Start development server**: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+- **Start with debug logging**: `uvicorn app.main:app --reload --log-level debug`
+
+### Testing
+- **Run all tests**: `pytest` (Note: No tests implemented yet)
+- **Run tests with coverage**: `pytest --cov=app`
+- **Run specific test file**: `pytest tests/test_models.py`
+- **Run tests in verbose mode**: `pytest -v`
+
+## Database Schema
+
+### Currently Implemented Tables
+- **users**: Authentication (id, username, email, hashed_password, is_active, created_at, updated_at)
+
+### Planned Database Design
+```
+Brand (1) -> (Many) Set
+Set (1) -> (Many) Card  
+Card (1) -> (Many) Parallel
+Player (Many) -> (1) Team
+Card (Many) -> (1) Player
+User (1) -> (Many) Collection
+Collection (1) -> (Many) CardRecord
+CardRecord (Many) -> (1) Card
+CardRecord (Many) -> (1) Parallel [optional]
+```
+
+### Planned Tables (Not Yet Implemented)
+- **brands**: Card manufacturers (id, name, description)
+- **teams**: Sports teams (id, name, city, sport, league)  
+- **players**: Individual players (id, name, team_id)
+- **sets**: Card sets (id, name, year, sport, brand_id)
+- **cards**: Individual cards (id, card_number, player_id, set_id)
+- **parallels**: Card variants (id, name, print_run, card_id)
+- **collections**: User collections (id, name, description, user_id)
+- **card_records**: Inventory records (id, collection_id, card_id, parallel_id, purchase_date, purchase_price, sale_date, sale_price, sku, notes)
+
+## Technology Stack
+
+- **Framework**: FastAPI 0.104+
+- **Database**: MySQL 8.0+
+- **ORM**: SQLAlchemy 2.0+
+- **Migrations**: Alembic
+- **Validation**: Pydantic v2
+- **Authentication**: JWT with python-jose
+- **Password Hashing**: passlib with bcrypt
+- **Testing**: pytest with httpx
+- **Code Quality**: black, isort, flake8, mypy
+
+## Environment Variables
+
+Create `.env` file with:
+```
+DATABASE_URL=mysql+pymysql://username:password@localhost:3306/card_inventory
+SECRET_KEY=your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
+## Current API Endpoints
+
+### Authentication Routes (`/auth`)
+- **POST /auth/register**: Create new user account
+- **POST /auth/login**: Login with username/password (returns JWT token)
+- **GET /auth/me**: Get current user info (requires authentication)
+- **POST /auth/logout**: Logout endpoint
+
+### General Routes
+- **GET /**: Welcome message
+- **GET /health**: Health check
+
+## API Documentation
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI JSON**: http://localhost:8000/openapi.json
+
+## Development Guidelines
+
+### Code Structure
+- Use repository pattern for database operations
+- Separate business logic into service layer
+- Follow RESTful API conventions
+- Use Pydantic schemas for request/response validation
+- Implement proper error handling with custom exceptions
+
+### Database Best Practices
+- Use appropriate indexes for query performance
+- Implement soft deletes where appropriate
+- Use database constraints for data integrity
+- Follow naming conventions (snake_case for columns)
+
+### Security Considerations
+- Always hash passwords before storing
+- Implement proper JWT token validation
+- Use dependency injection for authentication
+- Validate all input data with Pydantic
+- Implement rate limiting for API endpoints
+
+### Testing Strategy
+- Unit tests for models and services
+- Integration tests for API endpoints
+- Mock external dependencies
+- Test both success and error scenarios
+- Maintain high test coverage (>90%)
+
+## Common Issues & Solutions
+
+### Database Connection Issues
+- Ensure MySQL service is running
+- Check database credentials in .env
+- Verify database exists and user has proper permissions
+
+### Migration Issues  
+- Always backup database before migrations
+- Review auto-generated migrations before applying
+- Use descriptive migration messages
+
+### Authentication Issues
+- Ensure SECRET_KEY is properly set
+- Check token expiration times
+- Validate JWT token format and claims
+
+### Aiven MySQL Connection Issues
+- Use `mysql+pymysql://` scheme (not `mysql://`)
+- Remove SSL parameters from DATABASE_URL if causing connection errors
+- Ensure database name and credentials are correct in .env
+
+## Architecture Notes
+
+### Current Authentication Flow
+1. **Registration**: Username/email validation → Password hashing → User creation
+2. **Login**: Credential validation → JWT token generation (30min expiry)
+3. **Protected Routes**: OAuth2PasswordBearer → Token validation → User lookup
+4. **Dependencies**: `get_current_user` → `get_current_active_user`
+
+### Project Structure Pattern
+- **models/**: SQLAlchemy ORM models
+- **schemas/**: Pydantic request/response models  
+- **services/**: Business logic and database operations
+- **routers/**: FastAPI route handlers
+- **utils/**: Shared utilities (security, helpers)
+
+### Configuration Management
+- Pydantic Settings with `.env` file loading
+- `extra = "ignore"` allows additional environment variables
+- Database URL constructed for PyMySQL + MySQL
+
+## Development Roadmap
+
+### Phase 1: Core Card Models (Next)
+- Implement Brand, Set, Card, Player, Team models
+- Create corresponding Pydantic schemas
+- Add basic CRUD operations
+
+### Phase 2: Collection Management
+- User collections and card inventory tracking
+- Purchase/sale history
+- Custom SKU and notes system
+
+### Phase 3: Advanced Features
+- Search and filtering
+- Parallel card variants
+- Data import/export
+>>>>>>> 926dad0 (init)
