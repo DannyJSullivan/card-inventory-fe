@@ -8,7 +8,6 @@ import { AdminDashboard } from './pages/AdminDashboard'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { AdminRoute } from './components/auth/AdminRoute'
 import { useAuthStore } from './stores/auth'
-import { useTokenRefresh } from './hooks/useTokenRefresh'
 import { ImportUploadPage } from './pages/ImportUploadPage'
 import { ImportResolvePage } from './pages/ImportResolvePage'
 import { PendingBatchesPage } from './pages/PendingBatchesPage'
@@ -16,8 +15,6 @@ import { PendingBatchesPage } from './pages/PendingBatchesPage'
 function App() {
   const { checkAuth, isAuthenticated } = useAuthStore()
   
-  useTokenRefresh()
-
   useEffect(() => {
     checkAuth()
   }, [checkAuth])

@@ -11,6 +11,20 @@ class AuthService {
     }
   }
 
+  async refresh(): Promise<LoginResponse> {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, { method: 'POST', headers: this.getAuthHeaders() })
+    if (!response.ok) {
+      const errorData: AuthError = await response.json().catch(()=>({detail:'Refresh failed'} as AuthError))
+      throw new Error(errorData.detail || 'Refresh failed')
+    }
+    return response.json()
+  }
+  async tokenStatus(): Promise<any> { // can refine later
+    const response = await fetch(`${API_BASE_URL}/auth/token-status`, { headers: this.getAuthHeaders() })
+    if (!response.ok) throw new Error('Token status failed')
+    return response.json()
+  }
+
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const formData = new URLSearchParams()
     formData.append('username', credentials.username)

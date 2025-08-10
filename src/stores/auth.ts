@@ -8,6 +8,24 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  setToken: (token: string) => {
+    authService.saveToken(token)
+    set({ token })
+  },
+  refreshToken: async () => {
+    const current = get().token
+    if (!current) return
+    try {
+      const data = await authService.refresh()
+      authService.saveToken(data.access_token)
+      set({ token: data.access_token, isAuthenticated: true })
+      // optionally refresh user silently
+      try { const user = await authService.getCurrentUser(); set({ user, isAuthenticated: true }) } catch {}
+    } catch (e) {
+      console.warn('Token refresh failed, logging out')
+      get().logout()
+    }
+  },
 
   login: async (credentials: LoginRequest) => {
     set({ isLoading: true, error: null })
@@ -145,6 +163,25 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     return user?.is_admin || false
   },
 }))
+
+// Background refresh every hour if token close to expiry (2h threshold)
+if (typeof window !== 'undefined') {
+  const refreshLoop = () => {
+    const state = useAuthStore.getState()
+    const token = state.token
+    if (!token) return
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const expMs = payload.exp * 1000
+      const remaining = expMs - Date.now()
+      const twoHours = 2 * 60 * 60 * 1000
+      if (remaining < twoHours) {
+        state.refreshToken()
+      }
+    } catch {/* ignore */}
+  }
+  setInterval(refreshLoop, 60 * 60 * 1000)
+}
 
 if (typeof window !== 'undefined') {
   const token = authService.getToken()

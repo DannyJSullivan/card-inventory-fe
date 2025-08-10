@@ -40,4 +40,6 @@ export interface AuthStore {
   clearError: () => void
   checkAuth: () => Promise<void>
   isAdmin: () => boolean
+  setToken: (token: string) => void
+  refreshToken: () => Promise<void>
 }
