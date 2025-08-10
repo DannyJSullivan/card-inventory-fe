@@ -127,6 +127,153 @@ export const AdminDashboard = () => {
             </button>
           </div>
 
+          {/* Data Management Cards */}
+          {/* Manage Cards Card */}
+          <div className="dashboard-card">
+            <div
+              className="dashboard-card-icon"
+              style={{ background: 'linear-gradient(135deg, #16a34a, #22c55e)' }}
+            >
+              <svg style={{ width: '24px', height: '24px', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6.878V6a2.25 2.25 0 012.25-2.25h7.5A2.25 2.25 0 0118 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 004.5 9v.878m13.5-3A2.25 2.25 0 0119.5 9v.878m-15 0A2.25 2.25 0 004.5 12v6a2.25 2.25 0 002.25 2.25h10.5A2.25 2.25 0 0019.5 18v-6a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 12v6z" />
+              </svg>
+            </div>
+            <h2 className="dashboard-card-title">Manage Cards</h2>
+            <p className="dashboard-card-description">
+              Create, edit, and delete individual cards with full details
+            </p>
+            <button
+              className="dashboard-card-button"
+              style={{ background: 'linear-gradient(135deg, #16a34a, #22c55e)' }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #15803d, #16a34a)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #16a34a, #22c55e)'
+              }}
+              onClick={() => navigate('/admin/cards')}
+            >
+              Manage Cards
+            </button>
+          </div>
+
+          {/* Manage Sets Card */}
+          <div className="dashboard-card">
+            <div
+              className="dashboard-card-icon"
+              style={{ background: 'linear-gradient(135deg, #ea580c, #f97316)' }}
+            >
+              <svg style={{ width: '24px', height: '24px', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+              </svg>
+            </div>
+            <h2 className="dashboard-card-title">Manage Sets</h2>
+            <p className="dashboard-card-description">
+              Create and manage card sets with brands, years, and release dates
+            </p>
+            <button
+              className="dashboard-card-button"
+              style={{ background: 'linear-gradient(135deg, #ea580c, #f97316)' }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #c2410c, #ea580c)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #ea580c, #f97316)'
+              }}
+              onClick={() => navigate('/admin/sets')}
+            >
+              Manage Sets
+            </button>
+          </div>
+
+          {/* Manage Brands Card */}
+          <div className="dashboard-card">
+            <div
+              className="dashboard-card-icon"
+              style={{ background: 'linear-gradient(135deg, #9333ea, #a855f7)' }}
+            >
+              <svg style={{ width: '24px', height: '24px', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6h.008v.008H6V6z" />
+              </svg>
+            </div>
+            <h2 className="dashboard-card-title">Manage Brands</h2>
+            <p className="dashboard-card-description">
+              Create and manage card manufacturers (Topps, Panini, Upper Deck, etc.)
+            </p>
+            <button
+              className="dashboard-card-button"
+              style={{ background: 'linear-gradient(135deg, #9333ea, #a855f7)' }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #7c3aed, #9333ea)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #9333ea, #a855f7)'
+              }}
+              onClick={() => navigate('/admin/brands')}
+            >
+              Manage Brands
+            </button>
+          </div>
+
+          {/* Manage Players Card */}
+          <div className="dashboard-card">
+            <div
+              className="dashboard-card-icon"
+              style={{ background: 'linear-gradient(135deg, #0d9488, #14b8a6)' }}
+            >
+              <svg style={{ width: '24px', height: '24px', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <h2 className="dashboard-card-title">Manage Players</h2>
+            <p className="dashboard-card-description">
+              Create and manage athletes across all sports with aliases
+            </p>
+            <button
+              className="dashboard-card-button"
+              style={{ background: 'linear-gradient(135deg, #0d9488, #14b8a6)' }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #0f766e, #0d9488)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #0d9488, #14b8a6)'
+              }}
+              onClick={() => navigate('/admin/players')}
+            >
+              Manage Players
+            </button>
+          </div>
+
+          {/* Manage Teams Card */}
+          <div className="dashboard-card">
+            <div
+              className="dashboard-card-icon"
+              style={{ background: 'linear-gradient(135deg, #be185d, #ec4899)' }}
+            >
+              <svg style={{ width: '24px', height: '24px', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+              </svg>
+            </div>
+            <h2 className="dashboard-card-title">Manage Teams</h2>
+            <p className="dashboard-card-description">
+              Create and manage sports teams across all leagues
+            </p>
+            <button
+              className="dashboard-card-button"
+              style={{ background: 'linear-gradient(135deg, #be185d, #ec4899)' }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #9d174d, #be185d)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #be185d, #ec4899)'
+              }}
+              onClick={() => navigate('/admin/teams')}
+            >
+              Manage Teams
+            </button>
+          </div>
+
           {/* Settings Management Card */}
           <div className="dashboard-card">
             <div 

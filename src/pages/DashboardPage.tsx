@@ -1,8 +1,10 @@
 import { useAuthStore } from '../stores/auth'
 import { AppNavbar } from '../components/ui/AppNavbar'
+import { useNavigate } from 'react-router-dom'
 
 export const DashboardPage = () => {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
 
   return (
     <div className="dashboard-container">
@@ -66,6 +68,7 @@ export const DashboardPage = () => {
               onMouseOut={(e) => {
                 e.currentTarget.style.background = 'linear-gradient(135deg, #059669, #0d9488)'
               }}
+              onClick={() => navigate('/cards/search')}
             >
               Browse Cards
             </button>

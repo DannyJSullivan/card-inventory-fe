@@ -999,49 +999,6 @@ export const ImportResolvePage = () => {
     unresolvedCount: number
     children: React.ReactNode
   }) => {
-    const contentRef = useRef<HTMLDivElement | null>(null)
-
-    useEffect(() => {
-      const el = contentRef.current
-      if (!el) return
-      const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      const isOpening = !collapsed
-
-      // Clear any previously set display (ensure measurable)
-      el.style.display = 'block'
-
-      if (prefersReducedMotion) {
-        el.style.transition = 'none'
-        el.style.height = isOpening ? 'auto' : '0px'
-        return
-      }
-
-      if (isOpening) {
-        // Start from 0 then expand to scrollHeight
-        el.style.height = '0px'
-        // Force reflow
-        void el.offsetHeight
-        const target = el.scrollHeight
-        el.style.transition = 'height .45s ease'
-        el.style.height = target + 'px'
-        const done = (e: TransitionEvent) => {
-          if (e.propertyName === 'height') {
-            el.style.height = 'auto' // allow natural growth
-            el.removeEventListener('transitionend', done)
-          }
-        }
-        el.addEventListener('transitionend', done)
-      } else {
-        // Closing: fix current height then animate to 0
-        if (el.style.height === 'auto') {
-          el.style.height = el.scrollHeight + 'px'
-        }
-        // Force reflow
-        void el.offsetHeight
-        el.style.transition = 'height .35s ease'
-        el.style.height = '0px'
-      }
-    }, [collapsed])
 
     return (
       <div className={`collapsible-card ${!collapsed ? 'open' : ''}`}>
@@ -1080,17 +1037,18 @@ export const ImportResolvePage = () => {
             </button>
           </div>
         </div>
-        <div
-          id={`section-${cardType}`}
-          className="collapsible-card-collapsible"
-          ref={contentRef}
-          role="region"
-          aria-label={`${cardType} cards`}
-        >
-          <div className="collapsible-card-inner">
-            {children}
+        {!collapsed && (
+          <div
+            id={`section-${cardType}`}
+            className="collapsible-card-collapsible"
+            role="region"
+            aria-label={`${cardType} cards`}
+          >
+            <div className="collapsible-card-inner">
+              {children}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     )
   }
