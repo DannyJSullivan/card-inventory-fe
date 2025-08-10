@@ -1,28 +1,12 @@
 import { useAuthStore } from '../stores/auth'
-import { SettingsDropdown } from '../components/ui/SettingsDropdown'
+import { AppNavbar } from '../components/ui/AppNavbar'
 
 export const DashboardPage = () => {
   const { user } = useAuthStore()
 
-  // Removed inline styles - now using CSS classes
-
   return (
     <div className="dashboard-container">
-      {/* Header */}
-      <div className="dashboard-header">
-        <div className="dashboard-header-content">
-          <div>
-            <h1 className="dashboard-title">
-              Card Inventory
-            </h1>
-            <p className="dashboard-welcome">
-              Welcome back, {user?.username}!
-            </p>
-          </div>
-          <SettingsDropdown />
-        </div>
-      </div>
-
+      <AppNavbar title="Card Inventory" subtitle={`Welcome back, ${user?.username || ''}!`} />
       {/* Main Content */}
       <div className="dashboard-main">
         {/* Cards Grid */}

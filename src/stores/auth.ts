@@ -139,6 +139,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       })
     }
   },
+
+  isAdmin: () => {
+    const { user } = get()
+    return user?.is_admin || false
+  },
 }))
 
 if (typeof window !== 'undefined') {

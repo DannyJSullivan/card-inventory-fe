@@ -4,9 +4,14 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { AdminDashboard } from './pages/AdminDashboard'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { AdminRoute } from './components/auth/AdminRoute'
 import { useAuthStore } from './stores/auth'
 import { useTokenRefresh } from './hooks/useTokenRefresh'
+import { ImportUploadPage } from './pages/ImportUploadPage'
+import { ImportResolvePage } from './pages/ImportResolvePage'
+import { PendingBatchesPage } from './pages/PendingBatchesPage'
 
 function App() {
   const { checkAuth, isAuthenticated } = useAuthStore()
@@ -39,6 +44,38 @@ function App() {
               <ProtectedRoute>
                 <DashboardPage />
               </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin" 
+            element={
+              <AdminRoute>
+                <AdminDashboard />
+              </AdminRoute>
+            } 
+          />
+          <Route 
+            path="/admin/imports/upload" 
+            element={
+              <AdminRoute>
+                <ImportUploadPage />
+              </AdminRoute>
+            } 
+          />
+          <Route 
+            path="/admin/imports/:batchId/resolve" 
+            element={
+              <AdminRoute>
+                <ImportResolvePage />
+              </AdminRoute>
+            } 
+          />
+          <Route 
+            path="/admin/imports/batches" 
+            element={
+              <AdminRoute>
+                <PendingBatchesPage />
+              </AdminRoute>
             } 
           />
           <Route 
