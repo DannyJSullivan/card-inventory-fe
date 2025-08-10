@@ -1,12 +1,12 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { importService } from '../services/imports'
 import { useImportResolutionStore } from '../stores/importResolution'
 import type { Candidate, CardRow, CardEditPayload, ImportPlayerRef, ImportParallelRef } from '../types/imports'
 import { AppNavbar } from '../components/ui/AppNavbar'
-import { createPortal } from 'react-dom'
 import '../components/CardEditModal.css'
+import '../components/CollapsibleCard.css'
 
 // Helper: parse card number for ordering
 const parseCardNum = (val: string | null | undefined): number => {
@@ -931,7 +931,7 @@ export const ImportResolvePage = () => {
   }
   const onApprove = (row: CardRow) => approveCardRow(row, groups.player_candidates, groups.team_candidates)
   
-  const approveAllInSection = (cardType: string, rows: CardRow[]) => {
+  const approveAllInSection = (_cardType: string, rows: CardRow[]) => {
     rows.forEach(row => approveCardRow(row, groups.player_candidates, groups.team_candidates))
   }
   
@@ -970,6 +970,8 @@ export const ImportResolvePage = () => {
     onEditParallels,
     onApproveAll,
     parallelsCount,
+    editCount,
+    unresolvedCount,
     children
   }: {
     cardType: string
@@ -979,62 +981,105 @@ export const ImportResolvePage = () => {
     onEditParallels: () => void
     onApproveAll: () => void
     parallelsCount: number
+    editCount: number
+    unresolvedCount: number
     children: React.ReactNode
-  }) => (
-    <div className="dashboard-card p-0 overflow-hidden border border-gray-700/70 bg-gray-900/60 backdrop-blur-sm transition-all duration-300">
-      <div className="flex items-center justify-between gap-4 px-5 py-4 relative">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={!collapsed}
-            aria-controls={`section-${cardType}`}
-            className="group inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-800 ring-1 ring-gray-700 text-gray-300 hover:bg-gray-700 hover:text-gray-100 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
-            title={collapsed ? `Expand ${cardType}` : `Collapse ${cardType}`}
-          >
-            <span
-              className={`block transform transition-transform duration-300 ${collapsed ? '' : 'rotate-90'}`}
-              style={{ transformOrigin: '50% 50%' }}
+  }) => {
+    const contentRef = useRef<HTMLDivElement | null>(null)
+
+    useEffect(() => {
+      const el = contentRef.current
+      if (!el) return
+      const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const isOpening = !collapsed
+
+      // Clear any previously set display (ensure measurable)
+      el.style.display = 'block'
+
+      if (prefersReducedMotion) {
+        el.style.transition = 'none'
+        el.style.height = isOpening ? 'auto' : '0px'
+        return
+      }
+
+      if (isOpening) {
+        // Start from 0 then expand to scrollHeight
+        el.style.height = '0px'
+        // Force reflow
+        void el.offsetHeight
+        const target = el.scrollHeight
+        el.style.transition = 'height .45s ease'
+        el.style.height = target + 'px'
+        const done = (e: TransitionEvent) => {
+          if (e.propertyName === 'height') {
+            el.style.height = 'auto' // allow natural growth
+            el.removeEventListener('transitionend', done)
+          }
+        }
+        el.addEventListener('transitionend', done)
+      } else {
+        // Closing: fix current height then animate to 0
+        if (el.style.height === 'auto') {
+          el.style.height = el.scrollHeight + 'px'
+        }
+        // Force reflow
+        void el.offsetHeight
+        el.style.transition = 'height .35s ease'
+        el.style.height = '0px'
+      }
+    }, [collapsed])
+
+    return (
+      <div className={`collapsible-card ${!collapsed ? 'open' : ''}`}>
+        <div className="collapsible-card-header">
+          <div className="collapsible-card-left">
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={!collapsed}
+              aria-controls={`section-${cardType}`}
+              className="collapsible-card-toggle"
+              title={collapsed ? `Expand ${cardType}` : `Collapse ${cardType}`}
             >
-              ▸
-            </span>
-          </button>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm sm:text-base font-semibold tracking-tight text-gray-100 select-none">{cardType}</h2>
-              <span className="text-[10px] font-medium text-gray-400 bg-gray-800/70 px-2 py-0.5 rounded-full border border-gray-700/70 select-none">{count} cards</span>
-              <span className="text-[10px] font-medium text-indigo-300/80 bg-indigo-900/30 px-2 py-0.5 rounded-full border border-indigo-700/40 select-none">{parallelsCount} parallels</span>
+              <span className="collapsible-card-toggle-icon">▸</span>
+            </button>
+            <div className="collapsible-card-title-row">
+              <h2 className="collapsible-card-title">{cardType}</h2>
+              <span className="collapsible-card-badge">{count} cards</span>
+              <span className="collapsible-card-badge edits">{editCount} edits</span>
+              <span className={`collapsible-card-badge ${unresolvedCount>0 ? 'unresolved' : 'resolved'}`}>{unresolvedCount>0 ? `${unresolvedCount} unresolved` : 'All resolved'}</span>
+              <span className="collapsible-card-badge parallels">{parallelsCount} parallels</span>
             </div>
           </div>
+          <div className="collapsible-card-actions">
+            <button
+              onClick={onEditParallels}
+              className="dashboard-card-button small gradient-indigo"
+            >
+              ⚡ Parallels
+            </button>
+            <button
+              onClick={onApproveAll}
+              className="dashboard-card-button small gradient-emerald"
+            >
+              ✓ Approve All
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onEditParallels}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-indigo-100 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 shadow-inner shadow-indigo-900/30 hover:from-violet-500 hover:to-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 disabled:opacity-50"
-          >
-            <span className="text-sm leading-none">⚡</span>
-            Parallels
-          </button>
-          <button
-            onClick={onApproveAll}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-emerald-100 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 shadow-inner shadow-emerald-900/30 hover:from-emerald-500 hover:to-green-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 disabled:opacity-50"
-          >
-            <span className="text-sm leading-none">✓</span>
-            Approve All
-          </button>
+        <div
+          id={`section-${cardType}`}
+          className="collapsible-card-collapsible"
+          ref={contentRef}
+          role="region"
+          aria-label={`${cardType} cards`}
+        >
+          <div className="collapsible-card-inner">
+            {children}
+          </div>
         </div>
       </div>
-      {/* Collapsible content wrapper with height animation */}
-      <div
-        id={`section-${cardType}`}
-        className={`transition-[grid-template-rows] duration-500 ease-in-out ${collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'} grid`}
-      >
-        <div className="overflow-hidden border-t border-gray-800/70 bg-gradient-to-b from-gray-900/40 to-gray-900/60 px-5 pb-6 pt-4">
-          {children}
-        </div>
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="dashboard-container">
@@ -1074,6 +1119,16 @@ export const ImportResolvePage = () => {
         <div className="space-y-10">
           {Object.entries(filteredByType).map(([cardType, list]) => {
             const isCollapsed = collapsedSections[cardType]
+            // compute per-section edit count
+            const editCount = list.reduce((acc, r) => acc + (cardEdits[r.row_id] ? 1 : 0), 0)
+            // compute unresolved entities across rows in this section
+            const unresolvedCount = list.reduce((acc, r) => {
+              const playerNames = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean)))
+              const teamNames = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean)))
+              const unresolvedPlayers = playerNames.filter(n => !players[n]?.selection).length
+              const unresolvedTeams = teamNames.filter(n => !teams[n]?.selection).length
+              return acc + unresolvedPlayers + unresolvedTeams
+            }, 0)
             return (
               <CollapsibleCard
                 key={cardType}
@@ -1081,6 +1136,8 @@ export const ImportResolvePage = () => {
                 count={list.length}
                 collapsed={!!isCollapsed}
                 parallelsCount={(cardTypeParallels[cardType] || []).length}
+                editCount={editCount}
+                unresolvedCount={unresolvedCount}
                 onToggle={() => toggleSection(cardType)}
                 onEditParallels={() => setParallelModalCardType(cardType)}
                 onApproveAll={() => approveAllInSection(cardType, list)}

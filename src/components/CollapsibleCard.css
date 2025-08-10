@@ -1,0 +1,170 @@
+/* Collapsible Card Section Styles */
+
+.collapsible-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  padding: 0;
+  overflow: hidden;
+  transition: background-color .3s ease, border-color .3s ease, box-shadow .3s ease;
+  margin-bottom: 32px; /* add space between sections */
+}
+
+.collapsible-card:hover {
+  box-shadow: var(--shadow-xl);
+}
+
+.collapsible-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px 16px 20px;
+  gap: 16px;
+}
+
+.collapsible-card-left {
+  display: flex;
+  align-items: center;
+  gap: 20px; /* extra space between toggle and title cluster */
+  min-width: 0;
+}
+
+.collapsible-card-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+  font-size: 14px;
+  padding: 0;
+}
+
+.collapsible-card-toggle:hover {
+  background: var(--button-hover);
+}
+
+.collapsible-card-toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.collapsible-card-toggle-icon {
+  display: block;
+  transform-origin: 50% 50%;
+  transition: transform .3s ease;
+}
+
+.collapsible-card.open .collapsible-card-toggle-icon {
+  transform: rotate(90deg);
+}
+
+.collapsible-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px; /* slightly tighter overall */
+  flex-wrap: wrap;
+}
+
+.collapsible-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: .25px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.collapsible-card-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.collapsible-card-badge.parallels {
+  background: rgba(67,56,202,0.15);
+  border-color: rgba(99,102,241,0.4);
+  color: #818cf8;
+}
+
+.collapsible-card-badge.edits {
+  background: rgba(16,185,129,0.10);
+  border-color: rgba(16,185,129,0.35);
+  color: #34d399;
+}
+
+.collapsible-card-badge.unresolved {
+  background: rgba(217,119,6,0.15);
+  border-color: rgba(245,158,11,0.45);
+  color: #fbbf24;
+}
+
+.collapsible-card-badge.resolved {
+  background: rgba(37,99,235,0.15);
+  border-color: rgba(59,130,246,0.45);
+  color: #60a5fa;
+}
+
+.collapsible-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Action buttons reuse dashboard-card-button but shrink padding */
+.dashboard-card-button.small {
+  width: auto;
+  padding: 8px 16px;
+  font-size: 12px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard-card-button.small:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+/* Gradients for specific quick actions */
+.dashboard-card-button.gradient-indigo {
+  background: linear-gradient(135deg,#4f46e5,#6366f1);
+}
+.dashboard-card-button.gradient-indigo:hover {
+  background: linear-gradient(135deg,#4338ca,#4f46e5);
+}
+
+.dashboard-card-button.gradient-emerald {
+  background: linear-gradient(135deg,#059669,#10b981);
+}
+.dashboard-card-button.gradient-emerald:hover {
+  background: linear-gradient(135deg,#047857,#059669);
+}
+
+/* Collapsible content (JS sets height) */
+.collapsible-card-collapsible {
+  overflow: hidden;
+  height: 0; /* collapsed state default */
+}
+
+.collapsible-card-inner {
+  overflow: hidden;
+  border-top: 1px solid var(--border-primary);
+  background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  padding: 24px 24px 28px 24px;
+}
+
+[data-theme="light"] .collapsible-card-inner {
+  background: linear-gradient(to bottom, rgba(0,0,0,0.02), rgba(0,0,0,0.015));
+}
