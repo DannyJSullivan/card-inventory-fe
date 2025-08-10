@@ -824,6 +824,33 @@ export const ImportResolvePage = () => {
   const rowsQuery = useQuery({ queryKey: ['import','batch',idNum,'rows'], queryFn: () => importService.getCardRows(idNum), enabled: !!idNum })
 
   useEffect(()=>{ if (groupsQuery.data) initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names) }, [groupsQuery.data, idNum, initialize])
+
+  // derive filtered rows
+  const filteredByType = useMemo(()=>{
+    if (!rowsQuery.data) return {}
+    
+    const rows = rowsQuery.data.rows.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number))
+    const byType: Record<string, CardRow[]> = {}
+    rows.forEach(r => { const ct = r.data.card_type || 'Other'; (byType[ct] ||= []).push(r) })
+    
+    const term = search.trim().toLowerCase()
+    const result: Record<string, CardRow[]> = {}
+    Object.entries(byType).forEach(([ct, list]) => {
+      const f = list.filter(r => {
+        const num = r.data.card_number || ''
+        const title = r.data.title || ''
+        const subset = r.data.subset || ''
+        const unresolvedPlayers = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean))).filter(n=>!players[n]?.selection).length
+        const unresolvedTeams = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean))).filter(n=>!teams[n]?.selection).length
+        const unresolvedTotal = unresolvedPlayers + unresolvedTeams
+        if (showUnresolvedOnly && unresolvedTotal === 0) return false
+        if (!term) return true
+        return [num,title,subset,ct].some(v => v.toLowerCase().includes(term))
+      })
+      if (f.length) result[ct] = f
+    })
+    return result
+  }, [rowsQuery.data, search, showUnresolvedOnly, players, teams])
   
   // Initialize card type parallels from the groups data
   useEffect(() => {
@@ -862,37 +889,24 @@ export const ImportResolvePage = () => {
     </div>
   )
   if (groupsQuery.error || rowsQuery.error) return <div className="p-6 text-red-500 text-sm">Error loading batch</div>
-  if (!groupsQuery.data || !rowsQuery.data) return null
+  if (!groupsQuery.data || !rowsQuery.data) return (
+    <div className="dashboard-container min-h-screen flex flex-col">
+      <AppNavbar title="Resolve Import" subtitle="Loading batch…" />
+      <div className="dashboard-main" style={{ paddingTop:'32px' }}>
+        <div className="flex items-center justify-center h-64 flex-col gap-4 text-sm text-gray-400">
+          <div className="w-10 h-10 border-4 border-gray-700 border-t-blue-500 rounded-full animate-spin" aria-label="Loading spinner" />
+          <span>Loading data…</span>
+        </div>
+      </div>
+    </div>
+  )
 
   const groups = groupsQuery.data
   const rows = rowsQuery.data.rows.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number))
-  const byType: Record<string, CardRow[]> = {}
-  rows.forEach(r => { const ct = r.data.card_type || 'Other'; (byType[ct] ||= []).push(r) })
 
   const unresolved = unresolvedCount()
   const playerUnresolved = unresolvedByKind('player')
   const teamUnresolved = unresolvedByKind('team')
-
-  // derive filtered rows
-  const filteredByType = useMemo(()=>{
-    const term = search.trim().toLowerCase()
-    const result: Record<string, CardRow[]> = {}
-    Object.entries(byType).forEach(([ct, list]) => {
-      const f = list.filter(r => {
-        const num = r.data.card_number || ''
-        const title = r.data.title || ''
-        const subset = r.data.subset || ''
-        const unresolvedPlayers = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean))).filter(n=>!players[n]?.selection).length
-        const unresolvedTeams = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean))).filter(n=>!teams[n]?.selection).length
-        const unresolvedTotal = unresolvedPlayers + unresolvedTeams
-        if (showUnresolvedOnly && unresolvedTotal === 0) return false
-        if (!term) return true
-        return [num,title,subset,ct].some(v => v.toLowerCase().includes(term))
-      })
-      if (f.length) result[ct] = f
-    })
-    return result
-  }, [byType, search, showUnresolvedOnly, players, teams])
 
   // auto expand effect
   useEffect(()=>{ if (expandAll) { /* no direct refs; handled by passing prop if needed */ } }, [expandAll])
