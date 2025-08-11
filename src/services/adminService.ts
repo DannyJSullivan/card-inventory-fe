@@ -59,7 +59,7 @@ class AdminService {
   }
 
   // Card Management
-  async getCards(skip = 0, limit = 100, sortBy?: string, sortOrder?: string): Promise<ApiResponse<PaginatedResponse<any>>> {
+  async getCards(skip = 0, limit = 100, sortBy?: string, sortOrder?: string, search?: string): Promise<ApiResponse<PaginatedResponse<any>>> {
     const params = new URLSearchParams({
       skip: skip.toString(),
       limit: limit.toString()
@@ -67,8 +67,48 @@ class AdminService {
     
     if (sortBy) params.set('sort_by', sortBy);
     if (sortOrder) params.set('sort_order', sortOrder);
+    if (search && search.trim()) params.set('search', search.trim());
     
     return this.request<PaginatedResponse<any>>(`/admin/cards?${params}`);
+  }
+
+  // Comprehensive Card Search
+  async searchCards(params: {
+    search?: string;
+    card_number?: string;
+    card_type?: string;
+    player_name?: string;
+    team_name?: string;
+    set_name?: string;
+    brand_name?: string;
+    year?: number;
+    is_rookie?: boolean;
+    is_autograph?: boolean;
+    has_parallel?: boolean;
+    parallel_type?: string;
+    page?: number;
+    page_size?: number;
+    sort_by?: string;
+    sort_order?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<any>>> {
+    const searchParams = new URLSearchParams();
+    
+    // Convert page/page_size to skip/limit format
+    const page = params.page || 1;
+    const pageSize = params.page_size || 20;
+    const skip = (page - 1) * pageSize;
+    
+    searchParams.set('skip', skip.toString());
+    searchParams.set('limit', pageSize.toString());
+    
+    // Add all search parameters
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && key !== 'page' && key !== 'page_size') {
+        searchParams.set(key, value.toString());
+      }
+    });
+    
+    return this.request<PaginatedResponse<any>>(`/cards/search?${searchParams}`);
   }
 
   async getCardForEdit(cardId: number) {
@@ -112,14 +152,17 @@ class AdminService {
   }
 
   // Set Management
-  async getSets(skip = 0, limit = 100, sortBy?: string, sortOrder?: string): Promise<ApiResponse<PaginatedResponse<any>>> {
+  async getSets(skip = 0, limit = 100, sortBy = 'id', sortOrder = 'desc', search?: string): Promise<ApiResponse<PaginatedResponse<any>>> {
     const params = new URLSearchParams({
       skip: skip.toString(),
-      limit: limit.toString()
+      limit: limit.toString(),
+      sort_by: sortBy,
+      sort_order: sortOrder
     });
     
-    if (sortBy) params.set('sort_by', sortBy);
-    if (sortOrder) params.set('sort_order', sortOrder);
+    if (search && search.trim()) {
+      params.set('search', search.trim());
+    }
     
     return this.request<PaginatedResponse<any>>(`/admin/sets?${params}`);
   }
@@ -178,9 +221,10 @@ class AdminService {
   }
 
   // Player Management
-  async getPlayers(sport?: string, skip = 0, limit = 100) {
+  async getPlayers(sport?: string, skip = 0, limit = 100, search?: string) {
     const params = new URLSearchParams({ skip: skip.toString(), limit: limit.toString() });
     if (sport) params.set('sport', sport);
+    if (search && search.trim()) params.set('search', search.trim());
     return this.request(`/admin/players?${params}`);
   }
 
@@ -199,9 +243,10 @@ class AdminService {
   }
 
   // Team Management
-  async getTeams(sport?: string, skip = 0, limit = 100) {
+  async getTeams(sport?: string, skip = 0, limit = 100, search?: string) {
     const params = new URLSearchParams({ skip: skip.toString(), limit: limit.toString() });
     if (sport) params.set('sport', sport);
+    if (search && search.trim()) params.set('search', search.trim());
     return this.request(`/admin/teams?${params}`);
   }
 
