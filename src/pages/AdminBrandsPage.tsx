@@ -1,8 +1,24 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link } from 'react-router'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { adminService } from '../services/adminService'
+
+// Custom hook for debouncing values
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
 
 interface Brand {
   id: number;
@@ -22,6 +38,11 @@ export const AdminBrandsPage = () => {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  const [totalItems, setTotalItems] = useState(0)
+  const [searchTerm, setSearchTerm] = useState('')
+  
+  // Debounce the search term to reduce API calls
+  const debouncedSearchTerm = useDebounce(searchTerm, 500)
   
   const pageSize = 20
   
@@ -34,20 +55,44 @@ export const AdminBrandsPage = () => {
 
   useEffect(() => {
     loadBrands()
-  }, [currentPage])
+  }, [currentPage, debouncedSearchTerm])
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    if (currentPage > 0) {
+      setCurrentPage(0)
+    }
+  }, [debouncedSearchTerm])
 
   const loadBrands = async () => {
     setLoading(true)
-    const result = await adminService.getBrands(currentPage * pageSize, pageSize)
+    setError(null)
     
-    if (result.error) {
-      setError(result.error)
-    } else if (result.data) {
-      setBrands(result.data.items || [])
-      setTotalPages(Math.ceil((result.data.total || 0) / pageSize))
+    try {
+      const result = await adminService.getBrands(
+        currentPage * pageSize, 
+        pageSize,
+        debouncedSearchTerm.trim() || undefined
+      )
+      
+      if (result.error) {
+        setError(`Failed to load brands: ${result.error}`)
+        setBrands([])
+      } else if (result.data && 'items' in result.data) {
+        const paginatedData = result.data as any
+        setBrands(paginatedData.items || [])
+        setTotalItems(paginatedData.total || 0)
+        setTotalPages(Math.ceil((paginatedData.total || 0) / pageSize))
+      } else {
+        setError('Server returned unexpected data format.')
+        setBrands([])
+      }
+    } catch (err) {
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
+      setBrands([])
+    } finally {
+      setLoading(false)
     }
-    
-    setLoading(false)
   }
 
   const handleEdit = (brand: Brand) => {
@@ -65,95 +110,170 @@ export const AdminBrandsPage = () => {
       return
     }
     
-    const result = await adminService.deleteBrand(brandId)
-    if (result.error) {
-      setError(result.error)
-    } else {
-      loadBrands()
+    try {
+      const result = await adminService.deleteBrand(brandId)
+      if (result.error) {
+        setError(`Failed to delete brand: ${result.error}`)
+      } else {
+        setError(null)
+        loadBrands()
+      }
+    } catch (err) {
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     }
   }
 
   const onSubmit = async (data: BrandFormData) => {
-    let result
+    setError(null)
     
-    if (editingBrand) {
-      result = await adminService.updateBrand(editingBrand.id, data)
-    } else {
-      result = await adminService.createBrand(data)
-    }
-    
-    if (result.error) {
-      setError(result.error)
-    } else {
-      setEditingBrand(null)
-      setShowCreateForm(false)
-      reset()
-      loadBrands()
+    try {
+      let result
+      if (editingBrand) {
+        result = await adminService.updateBrand(editingBrand.id, data)
+      } else {
+        result = await adminService.createBrand(data)
+      }
+      
+      if (result.error) {
+        setError(`Failed to ${editingBrand ? 'update' : 'create'} brand: ${result.error}`)
+      } else {
+        setEditingBrand(null)
+        setShowCreateForm(false)
+        reset()
+        loadBrands()
+      }
+    } catch (err) {
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     }
   }
 
   if (loading && brands.length === 0) {
-    return <div className="loading">Loading brands...</div>
+    return (
+      <div className="dashboard-container">
+        <AppNavbar title="Admin - Manage Brands" subtitle="Create and manage card manufacturers" />
+        <div className="dashboard-main">
+          <div className="loading">
+            <div style={{ textAlign: 'center', padding: '64px' }}>
+              <div style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '16px' }}>
+                Loading brands...
+              </div>
+              <div style={{ color: 'var(--text-secondary)' }}>
+                Please wait while we fetch your brand data
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="dashboard-container">
       <AppNavbar title="Admin - Manage Brands" subtitle="Create and manage card manufacturers" />
       <div className="dashboard-main">
-        <div style={{ marginBottom: '24px' }}>
-          <Link to="/admin" style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            ← Back to Admin Dashboard
-          </Link>
-        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-            Brand Management
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+              Brand Management
+            </h2>
+            {loading && <div className="loading-spinner"></div>}
+            {totalItems > 0 && (
+              <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                Showing {currentPage * pageSize + 1}-{Math.min((currentPage + 1) * pageSize, totalItems)} of {totalItems.toLocaleString()} brands
+              </span>
+            )}
+          </div>
           <button onClick={() => setShowCreateForm(true)} className="btn-primary" style={{ width: 'auto', margin: 0, padding: '8px 16px' }}>
             Add New Brand
           </button>
         </div>
 
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ flex: '1', maxWidth: '400px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search brands..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ margin: 0 }}
+            />
+          </div>
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              style={{
+                marginLeft: '12px',
+                padding: '8px 12px',
+                background: 'none',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer'
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
       {error && (
         <div className="error-message">
-          {error}
+          <span>{error}</span>
+          <button 
+            onClick={() => {
+              setError(null)
+              loadBrands()
+            }} 
+            className="error-retry-button"
+          >
+            Retry
+          </button>
         </div>
       )}
 
       {(showCreateForm || editingBrand) && (
-        <div className="admin-form" style={{ marginBottom: '24px' }}>
-          <h2>{editingBrand ? 'Edit Brand' : 'Create New Brand'}</h2>
-          
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="form-group">
-              <label className="form-label">Brand Name</label>
-              <input
-                type="text"
-                className="form-input"
-                {...register('name', { required: 'Brand name is required' })}
-                defaultValue={editingBrand?.name}
-                placeholder="e.g., Topps, Panini, Upper Deck"
-              />
-              {errors.name && <div className="form-error">{errors.name.message}</div>}
-            </div>
+        <div className="modal-overlay" onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setEditingBrand(null)
+            setShowCreateForm(false)
+            reset()
+          }
+        }}>
+          <div className="modal-content">
+            <h2>{editingBrand ? 'Edit Brand' : 'Create New Brand'}</h2>
+            
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <div className="form-group">
+                <label className="form-label">Brand Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  {...register('name', { required: 'Brand name is required' })}
+                  defaultValue={editingBrand?.name}
+                  placeholder="e.g., Topps, Panini, Upper Deck"
+                />
+                {errors.name && <div className="form-error">{errors.name.message}</div>}
+              </div>
 
-            <div className="admin-form-actions">
-              <button type="submit" disabled={isSubmitting} className="btn-primary">
-                {isSubmitting ? 'Saving...' : editingBrand ? 'Update Brand' : 'Create Brand'}
-              </button>
-              <button 
-                type="button" 
-                onClick={() => {
-                  setEditingBrand(null)
-                  setShowCreateForm(false)
-                  reset()
-                }} 
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+              <div className="admin-form-actions">
+                <button type="submit" disabled={isSubmitting} className="btn-primary">
+                  {isSubmitting ? 'Saving...' : editingBrand ? 'Update Brand' : 'Create Brand'}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setEditingBrand(null)
+                    setShowCreateForm(false)
+                    reset()
+                  }} 
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -161,18 +281,16 @@ export const AdminBrandsPage = () => {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>ID</th>
               <th>Brand Name</th>
-              <th>Sets Count</th>
+              <th>Sets</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {brands.map(brand => (
               <tr key={brand.id}>
-                <td>{brand.id}</td>
                 <td>{brand.name}</td>
-                <td>{brand.set_count?.toLocaleString() || 0}</td>
+                <td>{brand.set_count?.toLocaleString() || '0'}</td>
                 <td>
                   <div className="admin-table-actions">
                     <button onClick={() => handleEdit(brand)} className="btn-small btn-edit">
@@ -217,7 +335,7 @@ export const AdminBrandsPage = () => {
             Previous
           </button>
           <span className="pagination-info">
-            Page {currentPage + 1} of {totalPages}
+            Page {currentPage + 1} of {totalPages} ({totalItems.toLocaleString()} total brands)
           </span>
           <button
             onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}

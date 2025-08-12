@@ -1,18 +1,38 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link } from 'react-router'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { adminService } from '../services/adminService'
+
+// Custom hook for debouncing values
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
 
 interface Set {
   id: number;
   brand_id: number;
-  brand_name: string;
+  brand_name?: string;
   name: string;
   year: number;
   sport: string;
   release_date?: string;
-  card_count: number;
+  card_count?: number;
+  brand?: {
+    id: number;
+    name: string;
+  };
 }
 
 interface SetFormData {
@@ -37,8 +57,13 @@ export const AdminSetsPage = () => {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [sortBy, setSortBy] = useState<string>('id')
+  const [totalItems, setTotalItems] = useState(0)
+  const [sortBy, setSortBy] = useState<string>('release_date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [searchTerm, setSearchTerm] = useState('')
+  
+  // Debounce the search term to reduce API calls
+  const debouncedSearchTerm = useDebounce(searchTerm, 500)
   
   const pageSize = 20
   
@@ -52,7 +77,14 @@ export const AdminSetsPage = () => {
   useEffect(() => {
     loadSets()
     loadBrands()
-  }, [currentPage, sortBy, sortOrder])
+  }, [currentPage, sortBy, sortOrder, debouncedSearchTerm])
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    if (currentPage > 0) {
+      setCurrentPage(0)
+    }
+  }, [debouncedSearchTerm])
 
   const loadSets = async () => {
     setLoading(true)
@@ -63,7 +95,8 @@ export const AdminSetsPage = () => {
         currentPage * pageSize, 
         pageSize,
         sortBy,
-        sortOrder
+        sortOrder,
+        debouncedSearchTerm.trim() || undefined
       )
       
       if (result.error) {
@@ -72,6 +105,7 @@ export const AdminSetsPage = () => {
       } else if (result.data && 'items' in result.data) {
         const paginatedData = result.data as any
         setSets(paginatedData.items || [])
+        setTotalItems(paginatedData.total || 0)
         setTotalPages(Math.ceil((paginatedData.total || 0) / pageSize))
       } else {
         setError('Server returned unexpected data format. Please ensure pagination is properly implemented.')
@@ -150,11 +184,6 @@ export const AdminSetsPage = () => {
       <div className="dashboard-container">
         <AppNavbar title="Admin - Manage Sets" subtitle="Create and manage card sets with release dates" />
         <div className="dashboard-main">
-          <div style={{ marginBottom: '24px' }}>
-            <Link to="/admin" style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              ← Back to Admin Dashboard
-            </Link>
-          </div>
           <div className="loading">
             <div style={{ textAlign: 'center', padding: '64px' }}>
               <div style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '16px' }}>
@@ -174,45 +203,75 @@ export const AdminSetsPage = () => {
     <div className="dashboard-container">
       <AppNavbar title="Admin - Manage Sets" subtitle="Create and manage card sets with release dates" />
       <div className="dashboard-main">
-        <div style={{ marginBottom: '24px' }}>
-          <Link to="/admin" style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            ← Back to Admin Dashboard
-          </Link>
-        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-            Set Management
-          </h2>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <label style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Sort by:</label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="form-input"
-              style={{ width: 'auto', padding: '4px 8px', fontSize: '14px' }}
-            >
-              <option value="id">ID</option>
-              <option value="name">Name</option>
-              <option value="year">Year</option>
-              <option value="release_date">Release Date</option>
-              <option value="brand_name">Brand</option>
-            </select>
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-              className="form-input"
-              style={{ width: 'auto', padding: '4px 8px', fontSize: '14px' }}
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+              Set Management
+            </h2>
+            {loading && <div className="loading-spinner"></div>}
+            {totalItems > 0 && (
+              <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                Showing {currentPage * pageSize + 1}-{Math.min((currentPage + 1) * pageSize, totalItems)} of {totalItems.toLocaleString()} sets
+              </span>
+            )}
           </div>
           <button onClick={() => setShowCreateForm(true)} className="btn-primary" style={{ width: 'auto', margin: 0, padding: '8px 16px' }}>
             Add New Set
           </button>
         </div>
-      </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ flex: '1', maxWidth: '400px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search sets by name, brand, or year..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ margin: 0 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                style={{
+                  padding: '8px 12px',
+                  background: 'none',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '6px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear
+              </button>
+            )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <label style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Sort by:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="form-input"
+                style={{ width: 'auto', padding: '4px 8px', fontSize: '14px' }}
+              >
+                <option value="release_date">Release Date</option>
+                <option value="name">Name</option>
+                <option value="year">Year</option>
+                <option value="brand_name">Brand</option>
+              </select>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                className="form-input"
+                style={{ width: 'auto', padding: '4px 8px', fontSize: '14px' }}
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
       {error && (
         <div className="error-message">
@@ -230,106 +289,114 @@ export const AdminSetsPage = () => {
       )}
 
       {(showCreateForm || editingSet) && (
-        <div className="admin-form" style={{ marginBottom: '24px' }}>
-          <h2>{editingSet ? 'Edit Set' : 'Create New Set'}</h2>
-          
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="form-group">
-              <label className="form-label">Brand</label>
-              <select
-                className="form-input"
-                {...register('brand_id', { required: 'Brand is required', valueAsNumber: true })}
-                defaultValue={editingSet?.brand_id}
-              >
-                <option value="">Select a brand</option>
-                {brands.map(brand => (
-                  <option key={brand.id} value={brand.id}>{brand.name}</option>
-                ))}
-              </select>
-              {errors.brand_id && <div className="form-error">{errors.brand_id.message}</div>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Name</label>
-              <input
-                type="text"
-                className="form-input"
-                {...register('name', { required: 'Name is required' })}
-                defaultValue={editingSet?.name}
-                placeholder="e.g., Chrome, Prizm, Bowman"
-              />
-              {errors.name && <div className="form-error">{errors.name.message}</div>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Year</label>
-              <input
-                type="number"
-                className="form-input"
-                {...register('year', { 
-                  required: 'Year is required', 
-                  valueAsNumber: true,
-                  min: { value: 1800, message: 'Year must be after 1800' },
-                  max: { value: new Date().getFullYear() + 2, message: 'Year cannot be more than 2 years in the future' }
-                })}
-                defaultValue={editingSet?.year}
-                min="1800"
-                max={new Date().getFullYear() + 2}
-              />
-              {errors.year && <div className="form-error">{errors.year.message}</div>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Sport</label>
-              <select
-                className="form-input"
-                {...register('sport', { required: 'Sport is required' })}
-                defaultValue={editingSet?.sport}
-              >
-                <option value="">Select a sport</option>
-                <option value="Baseball">Baseball</option>
-                <option value="Basketball">Basketball</option>
-                <option value="Football">Football</option>
-                <option value="Hockey">Hockey</option>
-                <option value="Soccer">Soccer</option>
-                <option value="Golf">Golf</option>
-                <option value="Tennis">Tennis</option>
-                <option value="Multi-Sport">Multi-Sport</option>
-                <option value="Non-Sport">Non-Sport</option>
-              </select>
-              {errors.sport && <div className="form-error">{errors.sport.message}</div>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Release Date (optional)</label>
-              <input
-                type="date"
-                className="form-input"
-                {...register('release_date')}
-                defaultValue={editingSet?.release_date}
-              />
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                The actual release date of this set (if known)
+        <div className="modal-overlay" onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setEditingSet(null)
+            setShowCreateForm(false)
+            reset()
+          }
+        }}>
+          <div className="modal-content">
+            <h2>{editingSet ? 'Edit Set' : 'Create New Set'}</h2>
+            
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <div className="form-group">
+                <label className="form-label">Brand</label>
+                <select
+                  className="form-input"
+                  {...register('brand_id', { required: 'Brand is required', valueAsNumber: true })}
+                  defaultValue={editingSet?.brand_id}
+                >
+                  <option value="">Select a brand</option>
+                  {brands.map(brand => (
+                    <option key={brand.id} value={brand.id}>{brand.name}</option>
+                  ))}
+                </select>
+                {errors.brand_id && <div className="form-error">{errors.brand_id.message}</div>}
               </div>
-            </div>
 
-            <div className="admin-form-actions">
-              <button type="submit" disabled={isSubmitting} className="btn-primary">
-                {isSubmitting ? 'Saving...' : editingSet ? 'Update Set' : 'Create Set'}
-              </button>
-              <button 
-                type="button" 
-                onClick={() => {
-                  setEditingSet(null)
-                  setShowCreateForm(false)
-                  reset()
-                }} 
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  {...register('name', { required: 'Name is required' })}
+                  defaultValue={editingSet?.name}
+                  placeholder="e.g., Chrome, Prizm, Bowman"
+                />
+                {errors.name && <div className="form-error">{errors.name.message}</div>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Year</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  {...register('year', { 
+                    required: 'Year is required', 
+                    valueAsNumber: true,
+                    min: { value: 1800, message: 'Year must be after 1800' },
+                    max: { value: new Date().getFullYear() + 2, message: 'Year cannot be more than 2 years in the future' }
+                  })}
+                  defaultValue={editingSet?.year}
+                  min="1800"
+                  max={new Date().getFullYear() + 2}
+                />
+                {errors.year && <div className="form-error">{errors.year.message}</div>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Sport</label>
+                <select
+                  className="form-input"
+                  {...register('sport', { required: 'Sport is required' })}
+                  defaultValue={editingSet?.sport}
+                >
+                  <option value="">Select a sport</option>
+                  <option value="Baseball">Baseball</option>
+                  <option value="Basketball">Basketball</option>
+                  <option value="Football">Football</option>
+                  <option value="Hockey">Hockey</option>
+                  <option value="Soccer">Soccer</option>
+                  <option value="Golf">Golf</option>
+                  <option value="Tennis">Tennis</option>
+                  <option value="Multi-Sport">Multi-Sport</option>
+                  <option value="Non-Sport">Non-Sport</option>
+                </select>
+                {errors.sport && <div className="form-error">{errors.sport.message}</div>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Release Date (optional)</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  {...register('release_date')}
+                  defaultValue={editingSet?.release_date}
+                />
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  The actual release date of this set (if known)
+                </div>
+              </div>
+
+              <div className="admin-form-actions">
+                <button type="submit" disabled={isSubmitting} className="btn-primary">
+                  {isSubmitting ? 'Saving...' : editingSet ? 'Update Set' : 'Create Set'}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setEditingSet(null)
+                    setShowCreateForm(false)
+                    reset()
+                  }} 
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -337,7 +404,6 @@ export const AdminSetsPage = () => {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>ID</th>
               <th>Brand</th>
               <th>Name</th>
               <th>Year</th>
@@ -350,8 +416,7 @@ export const AdminSetsPage = () => {
           <tbody>
             {sets.map(set => (
               <tr key={set.id}>
-                <td>{set.id}</td>
-                <td>{set.brand_name}</td>
+                <td>{set.brand?.name || set.brand_name || 'Unknown Brand'}</td>
                 <td>{set.name}</td>
                 <td>{set.year}</td>
                 <td>
@@ -362,7 +427,7 @@ export const AdminSetsPage = () => {
                   )}
                 </td>
                 <td>{set.sport}</td>
-                <td>{set.card_count?.toLocaleString() || 0}</td>
+                <td>{set.card_count?.toLocaleString() || '0'}</td>
                 <td>
                   <div className="admin-table-actions">
                     <button onClick={() => handleEdit(set)} className="btn-small btn-edit">
@@ -396,7 +461,7 @@ export const AdminSetsPage = () => {
             Previous
           </button>
           <span className="pagination-info">
-            Page {currentPage + 1} of {totalPages}
+            Page {currentPage + 1} of {totalPages} ({totalItems.toLocaleString()} total sets)
           </span>
           <button
             onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}

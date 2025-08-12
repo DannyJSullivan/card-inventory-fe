@@ -587,11 +587,6 @@ export const AdminCardsPage = () => {
       <div className="dashboard-container">
         <AppNavbar title="Admin - Manage Cards" subtitle="Create, edit, and manage individual cards" />
         <div className="dashboard-main">
-          <div style={{ marginBottom: '24px' }}>
-            <Link to="/admin" style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              ← Back to Admin Dashboard
-            </Link>
-          </div>
           <div className="loading">
             <div style={{ textAlign: 'center', padding: '64px' }}>
               <div style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '16px' }}>

@@ -44,8 +44,19 @@ class AdminService {
         };
       }
 
-      const data = await response.json();
-      return { data };
+      // Handle empty responses (common for DELETE operations)
+      const text = await response.text();
+      if (!text) {
+        return { data: null };
+      }
+
+      try {
+        const data = JSON.parse(text);
+        return { data };
+      } catch {
+        // If it's not JSON, return the text as data
+        return { data: text };
+      }
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : 'Network error occurred'
@@ -192,8 +203,17 @@ class AdminService {
   }
 
   // Brand Management
-  async getBrands(skip = 0, limit = 100): Promise<ApiResponse<PaginatedResponse<any>>> {
-    return this.request<PaginatedResponse<any>>(`/admin/brands?skip=${skip}&limit=${limit}`);
+  async getBrands(skip = 0, limit = 100, search?: string): Promise<ApiResponse<PaginatedResponse<any>>> {
+    const params = new URLSearchParams({
+      skip: skip.toString(),
+      limit: limit.toString()
+    });
+    
+    if (search && search.trim()) {
+      params.set('search', search.trim());
+    }
+    
+    return this.request<PaginatedResponse<any>>(`/admin/brands?${params}`);
   }
 
   async getBrand(brandId: number) {
@@ -242,6 +262,12 @@ class AdminService {
     });
   }
 
+  async deletePlayer(playerId: number) {
+    return this.request(`/admin/players/${playerId}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Team Management
   async getTeams(sport?: string, skip = 0, limit = 100, search?: string) {
     const params = new URLSearchParams({ skip: skip.toString(), limit: limit.toString() });
@@ -264,7 +290,55 @@ class AdminService {
     });
   }
 
+  async deleteTeam(teamId: number) {
+    return this.request(`/admin/teams/${teamId}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Parallel Management
+  async getParallels(skip = 0, limit = 100, search?: string, rarity?: string): Promise<ApiResponse<PaginatedResponse<any>>> {
+    const params = new URLSearchParams({
+      skip: skip.toString(),
+      limit: limit.toString()
+    });
+    
+    if (search && search.trim()) {
+      params.set('search', search.trim());
+    }
+    
+    if (rarity && rarity.trim()) {
+      params.set('rarity_level', rarity.trim());
+    }
+    
+    return this.request<PaginatedResponse<any>>(`/admin/parallels?${params}`);
+  }
+
+  async getParallel(parallelId: number) {
+    return this.request(`/admin/parallels/${parallelId}`);
+  }
+
+  async createParallel(parallelData: any) {
+    return this.request('/admin/parallels', {
+      method: 'POST',
+      body: JSON.stringify(parallelData)
+    });
+  }
+
+  async updateParallel(parallelId: number, updates: any) {
+    return this.request(`/admin/parallels/${parallelId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates)
+    });
+  }
+
+  async deleteParallel(parallelId: number) {
+    return this.request(`/admin/parallels/${parallelId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Legacy parallel methods (for backwards compatibility)
   async getParallelTypes() {
     return this.request('/admin/parallel-types');
   }

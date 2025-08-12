@@ -10,6 +10,7 @@ import { AdminSetsPage } from './pages/AdminSetsPage'
 import { AdminBrandsPage } from './pages/AdminBrandsPage'
 import { AdminPlayersPage } from './pages/AdminPlayersPage'
 import { AdminTeamsPage } from './pages/AdminTeamsPage'
+import { AdminParallelsPage } from './pages/AdminParallelsPage'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { AdminRoute } from './components/auth/AdminRoute'
 import { useAuthStore } from './stores/auth'
@@ -94,6 +95,14 @@ function App() {
             element={
               <AdminRoute>
                 <AdminTeamsPage />
+              </AdminRoute>
+            } 
+          />
+          <Route 
+            path="/admin/parallels" 
+            element={
+              <AdminRoute>
+                <AdminParallelsPage />
               </AdminRoute>
             } 
           />
