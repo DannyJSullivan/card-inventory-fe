@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { adminService } from '../services/adminService'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 // Custom hook for debouncing values
 function useDebounce<T>(value: T, delay: number): T {
@@ -80,6 +81,9 @@ export const AdminParallelsPage = () => {
       setCurrentPage(0)
     }
   }, [debouncedSearchTerm, selectedRarity])
+
+  // Prevent body scroll when modal is open
+  useModalScrollLock(showCreateForm || !!editingParallel)
 
   const loadParallels = async () => {
     setLoading(true)
