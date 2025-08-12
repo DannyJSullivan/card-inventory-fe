@@ -64,6 +64,8 @@ export const AdminParallelsPage = () => {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting }
   } = useForm<ParallelFormData>()
 
@@ -84,6 +86,31 @@ export const AdminParallelsPage = () => {
 
   // Prevent body scroll when modal is open
   useModalScrollLock(showCreateForm || !!editingParallel)
+
+  // Watch print_run field and auto-fill rarity and serial numbered
+  const printRun = watch('print_run')
+  useEffect(() => {
+    // Only auto-fill if there's a print run value and we're not editing an existing parallel
+    // (to avoid overriding existing data)
+    if (printRun && printRun > 0 && !editingParallel) {
+      setValue('is_serial_numbered', true)
+      
+      // Auto-fill rarity based on print run
+      let rarity: string
+      if (printRun === 1) {
+        rarity = 'Ultra Rare'
+      } else if (printRun <= 50) {
+        rarity = 'Super Rare'
+      } else if (printRun <= 150) {
+        rarity = 'Rare'
+      } else if (printRun <= 500) {
+        rarity = 'Uncommon'
+      } else {
+        rarity = 'Common'
+      }
+      setValue('rarity_level', rarity)
+    }
+  }, [printRun, editingParallel, setValue])
 
   const loadParallels = async () => {
     setLoading(true)
@@ -315,31 +342,6 @@ export const AdminParallelsPage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Description</label>
-                <textarea
-                  className="form-input"
-                  {...register('description')}
-                  defaultValue={editingParallel?.description}
-                  placeholder="Optional description of this parallel type..."
-                  rows={3}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Rarity Level</label>
-                <select
-                  className="form-input"
-                  {...register('rarity_level')}
-                  defaultValue={editingParallel?.rarity_level}
-                >
-                  <option value="">Select rarity level</option>
-                  {rarityLevels.map(level => (
-                    <option key={level} value={level}>{level}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
                 <label className="form-label">Print Run</label>
                 <input
                   type="number"
@@ -353,6 +355,37 @@ export const AdminParallelsPage = () => {
                   min="1"
                 />
                 {errors.print_run && <div className="form-error">{errors.print_run.message}</div>}
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Auto-fills rarity: 1=Ultra Rare, ≤50=Super Rare, ≤150=Rare, ≤500=Uncommon, &gt;500=Common
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Rarity Level</label>
+                <select
+                  className="form-input"
+                  {...register('rarity_level')}
+                  defaultValue={editingParallel?.rarity_level || ''}
+                >
+                  <option value="">None</option>
+                  {rarityLevels.map(level => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Automatically set based on print run, but can be manually overridden
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Description</label>
+                <textarea
+                  className="form-input"
+                  {...register('description')}
+                  defaultValue={editingParallel?.description}
+                  placeholder="Optional description of this parallel type..."
+                  rows={3}
+                />
               </div>
 
               <div className="form-group">
