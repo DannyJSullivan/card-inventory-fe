@@ -22,6 +22,7 @@ export const ImportUploadPage = () => {
   const [batchPayload, setBatchPayload] = useState<ImportBatchPayload | null>(null)
   const [stageLoading, setStageLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
   const [multiplePdfMode, setMultiplePdfMode] = useState(false)
 
@@ -72,13 +73,28 @@ export const ImportUploadPage = () => {
       if (!batchPayload) throw new Error('No batch payload to stage')
       return importService.stage(batchPayload)
     },
-    onSuccess: (data) => navigate(`/admin/imports/${data.import_batch_id}/resolve`),
+    onSuccess: (data) => {
+      // Show success message instead of navigating away
+      setError(null)
+      setSuccessMessage(`Import batch ${data.import_batch_id} has been staged and is ready for name resolution. You can continue uploading more data for this set or navigate to resolve all pending batches.`)
+      // Reset form for next upload
+      setPreview(null)
+      setBatchPayload(null)
+      setJsonText('')
+      setFile(null)
+      setFiles([])
+      setMode('csv')
+      setMultiplePdfMode(false)
+      // Clear success message after 10 seconds
+      setTimeout(() => setSuccessMessage(null), 10000)
+    },
     onError: (e: any) => setError(e.message || 'Stage failed'),
     onSettled: () => setStageLoading(false),
   })
 
   const handleUpload = () => {
     setError(null)
+    setSuccessMessage(null)
     if (isJson) uploadJsonMutation.mutate()
     else uploadFileMutation.mutate()
   }
@@ -110,6 +126,7 @@ export const ImportUploadPage = () => {
 
   const handleStage = () => {
     setError(null)
+    setSuccessMessage(null)
     setStageLoading(true)
     stageMutation.mutate()
   }
@@ -422,22 +439,6 @@ export const ImportUploadPage = () => {
                 <div className="space-y-3 mb-10">
                   <div className="flex items-center justify-between">
                     <label className="form-label" style={{ marginBottom: 0 }}>ImportBatchPayload JSON</label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCopyJSON}
-                        disabled={!jsonText}
-                        className="text-xs px-3 py-1.5 rounded border border-gray-600 bg-gray-700 hover:bg-gray-600 disabled:opacity-50"
-                      >{copyState === 'copied' ? 'Copied!' : 'Copy JSON'}</button>
-                      {preview && mode==='json' && (
-                        <button
-                          type="button"
-                          onClick={handleStage}
-                          disabled={stageMutation.isPending || stageLoading}
-                          className="text-xs px-3 py-1.5 rounded border border-emerald-600 bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50"
-                        >{stageMutation.isPending || stageLoading ? 'Staging…' : 'Stage'}</button>
-                      )}
-                    </div>
                   </div>
                   <textarea
                     className="w-full h-80 p-4 rounded bg-[var(--bg-tertiary)] text-sm font-mono border"
@@ -459,7 +460,44 @@ export const ImportUploadPage = () => {
                 >
                   {uploadFileMutation.isPending || uploadJsonMutation.isPending ? getLoadingMessage() : 'Upload & Preview'}
                 </button>
-                {/* Stage button moved into JSON header when in JSON mode; keep here as fallback when preview exists and not switched yet */}
+                
+                {/* Show Copy JSON and Stage buttons when preview exists and in JSON mode */}
+                {preview && isJson && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCopyJSON}
+                      disabled={!jsonText}
+                      className="dashboard-card-button"
+                      style={{ 
+                        background: 'linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary))', 
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-primary)',
+                        width: 'auto', 
+                        padding: '12px 26px', 
+                        fontSize: '13px' 
+                      }}
+                    >
+                      {copyState === 'copied' ? 'Copied!' : 'Copy JSON'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStage}
+                      disabled={stageMutation.isPending || stageLoading}
+                      className="dashboard-card-button"
+                      style={{ 
+                        background: 'linear-gradient(135deg, #059669, #047857)', 
+                        width: 'auto', 
+                        padding: '12px 26px', 
+                        fontSize: '13px' 
+                      }}
+                    >
+                      {stageMutation.isPending || stageLoading ? 'Staging…' : 'Stage'}
+                    </button>
+                  </>
+                )}
+                
+                {/* Stage button for non-JSON mode when preview exists */}
                 {preview && !isJson && (
                   <button
                     className="dashboard-card-button"
@@ -472,6 +510,34 @@ export const ImportUploadPage = () => {
                 )}
               </div>
               {error && <div className="mt-6 alert alert-error text-sm" style={{ marginBottom: 0 }}>{error}</div>}
+              {successMessage && (
+                <div className="mt-6 p-4 rounded border" style={{ 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  borderColor: 'var(--accent-primary)', 
+                  color: 'var(--text-primary)',
+                  marginBottom: '16px'
+                }}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium mb-2" style={{ color: 'var(--accent-primary)' }}>✅ Batch Staged Successfully!</div>
+                      <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>{successMessage}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/admin/imports/pending')}
+                      className="ml-4 text-xs px-3 py-1.5 rounded border"
+                      style={{ 
+                        borderColor: 'var(--accent-primary)', 
+                        backgroundColor: 'var(--accent-primary)', 
+                        color: 'white',
+                        fontWeight: '500'
+                      }}
+                    >
+                      View Pending Batches
+                    </button>
+                  </div>
+                </div>
+              )}
               
               <UploadProgress 
                 isUploading={uploadFileMutation.isPending || uploadJsonMutation.isPending} 
