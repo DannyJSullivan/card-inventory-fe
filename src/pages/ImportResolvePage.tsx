@@ -1,19 +1,13 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { importService } from '../services/imports'
 import { useImportResolutionStore } from '../stores/importResolution'
-import type { Candidate, CardRow, CardEditPayload, ImportPlayerRef, ImportParallelRef, GroupedPreviewResponse } from '../types/imports'
+import type { CardRow, CardEditPayload, ImportPlayerRef, ImportParallelRef, CardTypeInfo } from '../types/imports'
 import { AppNavbar } from '../components/ui/AppNavbar'
+import { Pagination } from '../components/ui/Pagination'
 import '../components/CardEditModal.css'
 import '../components/CollapsibleCard.css'
-
-// Helper: parse card number for ordering
-const parseCardNum = (val: string | null | undefined): number => {
-  if (!val) return Number.MAX_SAFE_INTEGER
-  const m = String(val).match(/\d+/)
-  return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER
-}
 
 // Helper: format score without trailing zeros
 const formatScore = (score: number): string => {
@@ -35,9 +29,6 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
   const base = row.data
   const { players, teams, select, clear } = useImportResolutionStore()
   const [cardNumber, setCardNumber] = useState(existingEdit?.card_number ?? base.card_number ?? '')
-  const [title, setTitle] = useState(existingEdit?.title ?? base.title ?? '')
-  const [subset, setSubset] = useState(existingEdit?.subset ?? base.subset ?? '')
-  const [notes, setNotes] = useState(existingEdit?.notes ?? base.notes ?? '')
   const [cardType, setCardType] = useState(existingEdit?.card_type ?? base.card_type ?? '')
   const [isRookie, setIsRookie] = useState(existingEdit?.is_rookie ?? base.is_rookie)
   const [isFirst, setIsFirst] = useState(existingEdit?.is_first ?? base.is_first)
@@ -69,9 +60,6 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
   const buildEdit = (): CardEditPayload | null => { 
     const e: CardEditPayload = { row_id: row.row_id }; 
     if (cardNumber !== (base.card_number||'')) e.card_number = cardNumber || undefined; 
-    if (title !== (base.title||'')) e.title = title || null; 
-    if (subset !== (base.subset||'')) e.subset = subset || null; 
-    if (notes !== (base.notes||'')) e.notes = notes || null; 
     if (cardType !== (base.card_type||'')) e.card_type = cardType || undefined; 
     if (isRookie !== base.is_rookie) e.is_rookie = isRookie; 
     if (isFirst !== base.is_first) e.is_first = isFirst; 
@@ -82,7 +70,9 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
 
   const save = () => { 
     console.log('Save clicked')
-    saveEdit(buildEdit())
+    const edit = buildEdit()
+    console.log('Edit to save:', edit)
+    saveEdit(edit)
     onClose() 
   }
 
@@ -138,42 +128,6 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <div className="card-edit-modal-field">
-                <label className="card-edit-modal-label">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="card-edit-modal-input"
-                />
-              </div>
-
-              <div className="card-edit-modal-field">
-                <label className="card-edit-modal-label">
-                  Subset
-                </label>
-                <input
-                  type="text"
-                  value={subset}
-                  onChange={(e) => setSubset(e.target.value)}
-                  className="card-edit-modal-input"
-                />
-              </div>
-
-              <div className="card-edit-modal-field">
-                <label className="card-edit-modal-label">
-                  Notes
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                  className="card-edit-modal-textarea"
-                />
               </div>
 
               {/* Checkboxes */}
@@ -718,80 +672,502 @@ const ParallelEditModal = ({ cardType, parallels, onSave, onClose }: ParallelMod
   )
 }
 
+// Card Type Section Component - Handles one card type with pagination
+interface CardTypeSectionProps {
+  batchId: number
+  cardTypeInfo: CardTypeInfo
+  groups: any
+  onCardEdit: (row: CardRow) => void
+  onParallelEdit: (cardType: string) => void
+  cardEdits: Record<number, CardEditPayload>
+  isCollapsed: boolean
+  onToggleCollapse: () => void
+}
+
+const CardTypeSection = ({ 
+  batchId, 
+  cardTypeInfo, 
+  groups, 
+  onCardEdit, 
+  onParallelEdit,
+  cardEdits,
+  isCollapsed,
+  onToggleCollapse 
+}: CardTypeSectionProps) => {
+  const cardType = cardTypeInfo.card_type || 'Unknown Card Type'
+  const [page, setPage] = useState(1)
+  const [showUnresolvedOnly, setShowUnresolvedOnly] = useState(false)
+  const perPage = 100
+  const { players, teams, select } = useImportResolutionStore()
+  const [autoThreshold] = useState(98)
+
+  // Query for this card type's rows
+  const rowsQuery = useQuery({
+    queryKey: ['import', 'batch', batchId, 'rows', cardType, page, showUnresolvedOnly ? 'unresolved' : 'all'],
+    queryFn: () => importService.getBatchRows(batchId, {
+      page,
+      perPage,
+      cardType,
+      ...(showUnresolvedOnly && { resolutionStatus: 'unresolved' })
+    }),
+    enabled: !isCollapsed
+  })
+
+  const rows = rowsQuery.data?.rows || []
+  const pagination = rowsQuery.data?.pagination
+
+  const approveCardRow = (row: CardRow) => {
+    const store = useImportResolutionStore.getState()
+    const playerNames = Array.from(new Set((row.data.players||[]).map(p=>p.name).filter(Boolean)))
+    const teamNames = Array.from(new Set((row.data.players||[]).map(p=>p.team_name).filter(Boolean)))
+    
+    // Resolve players
+    playerNames.forEach(raw => {
+      if (!store.players[raw]?.selection) {
+        const candidates = groups?.player_candidates?.[raw] || []
+        const best = candidates.slice().sort((a: any, b: any) => b.score - a.score)[0]
+        if (best && best.score >= autoThreshold) {
+          store.select('player', raw, { kind:'player', raw, existingId: best.id, canonical: best.name })
+        } else {
+          store.select('player', raw, { kind:'player', raw, create: raw })
+        }
+      }
+    })
+    
+    // Resolve teams
+    teamNames.forEach(raw => {
+      if (!store.teams[raw]?.selection) {
+        const candidates = groups?.team_candidates?.[raw] || []
+        const best = candidates.slice().sort((a: any, b: any) => b.score - a.score)[0]
+        if (best && best.score >= autoThreshold) {
+          store.select('team', raw, { kind:'team', raw, existingId: best.id, canonical: best.name })
+        } else {
+          store.select('team', raw, { kind:'team', raw, create: raw })
+        }
+      }
+    })
+  }
+
+  const approveAllInSection = () => {
+    rows.forEach(row => approveCardRow(row))
+  }
+
+  const autoResolveSection = () => {
+    rows.forEach(row => {
+      const playerNames = Array.from(new Set((row.data.players||[]).map(p=>p.name).filter(Boolean)))
+      const teamNames = Array.from(new Set((row.data.players||[]).map(p=>p.team_name).filter(Boolean)))
+      
+      // Auto-resolve players with high confidence
+      playerNames.forEach(raw => {
+        if (!players[raw]?.selection) {
+          const candidates = groups?.player_candidates?.[raw] || []
+          const best = candidates.slice().sort((a: any, b: any) => b.score - a.score)[0]
+          if (best && best.score >= autoThreshold) {
+            select('player', raw, { kind:'player', raw, existingId: best.id, canonical: best.name })
+          }
+        }
+      })
+      
+      // Auto-resolve teams with high confidence
+      teamNames.forEach(raw => {
+        if (!teams[raw]?.selection) {
+          const candidates = groups?.team_candidates?.[raw] || []
+          const best = candidates.slice().sort((a: any, b: any) => b.score - a.score)[0]
+          if (best && best.score >= autoThreshold) {
+            select('team', raw, { kind:'team', raw, existingId: best.id, canonical: best.name })
+          }
+        }
+      })
+    })
+  }
+
+  if (rowsQuery.isLoading && !isCollapsed) {
+    return (
+      <div className="collapsible-card">
+        <div className="collapsible-card-header">
+          <div className="collapsible-card-left">
+            <button onClick={onToggleCollapse} className="collapsible-card-toggle">
+              <span className="collapsible-card-toggle-icon">▸</span>
+            </button>
+            <div className="collapsible-card-title-row">
+              <h2 className="collapsible-card-title">{cardType}</h2>
+              <span className="collapsible-card-badge">Loading...</span>
+            </div>
+          </div>
+        </div>
+        {!isCollapsed && (
+          <div className="collapsible-card-collapsible">
+            <div className="collapsible-card-inner">
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-gray-700 border-t-blue-500 rounded-full animate-spin" />
+                <span className="ml-2 text-gray-400">Loading cards...</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (rowsQuery.error) {
+    return (
+      <div className="collapsible-card">
+        <div className="collapsible-card-header">
+          <div className="collapsible-card-left">
+            <button onClick={onToggleCollapse} className="collapsible-card-toggle">
+              <span className="collapsible-card-toggle-icon">▸</span>
+            </button>
+            <div className="collapsible-card-title-row">
+              <h2 className="collapsible-card-title">{cardType}</h2>
+              <span className="collapsible-card-badge error">Error</span>
+            </div>
+          </div>
+        </div>
+        {!isCollapsed && (
+          <div className="collapsible-card-collapsible">
+            <div className="collapsible-card-inner">
+              <div className="text-center py-8 text-red-400">
+                Error loading cards for {cardType}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className={`collapsible-card ${!isCollapsed ? 'open' : ''}`}>
+      <div className="collapsible-card-header">
+        <div className="collapsible-card-left">
+          <button
+            onClick={onToggleCollapse}
+            className="collapsible-card-toggle"
+            aria-expanded={!isCollapsed}
+          >
+            <span className="collapsible-card-toggle-icon">▸</span>
+          </button>
+          <div className="collapsible-card-title-row">
+            <h2 className="collapsible-card-title">{cardType}</h2>
+            <span className="collapsible-card-badge">
+              {cardTypeInfo.total_cards || 0} cards
+            </span>
+            <span className={`collapsible-card-badge ${(cardTypeInfo.unresolved_cards || 0) > 0 ? 'unresolved' : 'resolved'}`}>
+              {(cardTypeInfo.unresolved_cards || 0) > 0 ? `${cardTypeInfo.unresolved_cards} unresolved` : 'All resolved'}
+            </span>
+            <span className="collapsible-card-badge" style={{ 
+              backgroundColor: (cardTypeInfo.resolution_percentage || 0) >= 100 ? '#059669' : 
+                              (cardTypeInfo.resolution_percentage || 0) >= 75 ? '#d97706' : '#dc2626',
+              color: 'white'
+            }}>
+              {(cardTypeInfo.resolution_percentage || 0).toFixed(0)}% complete
+            </span>
+            <span className="collapsible-card-badge parallels">
+              {(cardTypeInfo.parallels || []).length} parallels
+            </span>
+          </div>
+        </div>
+        <div className="collapsible-card-actions">
+          <button
+            onClick={() => onParallelEdit(cardType)}
+            className="dashboard-card-button small gradient-indigo"
+          >
+            ⚡ Parallels
+          </button>
+          <button
+            onClick={autoResolveSection}
+            className="dashboard-card-button small gradient-blue"
+            disabled={rows.length === 0}
+            title="Auto-resolve entities with high confidence matches (≥98%)"
+          >
+            🎯 Auto Resolve
+          </button>
+          <button
+            onClick={approveAllInSection}
+            className="dashboard-card-button small gradient-emerald"
+            disabled={rows.length === 0}
+          >
+            ✓ Approve All
+          </button>
+        </div>
+      </div>
+
+      {!isCollapsed && (
+        <div className="collapsible-card-collapsible">
+          <div className="collapsible-card-inner">
+            {/* Section Controls */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '16px',
+              padding: '12px',
+              backgroundColor: 'var(--bg-tertiary)',
+              borderRadius: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={showUnresolvedOnly} 
+                    onChange={e => {
+                      setShowUnresolvedOnly(e.target.checked)
+                      setPage(1) // Reset to first page when filter changes
+                    }}
+                    className="accent-blue-600" 
+                  />
+                  <span style={{ color: 'var(--text-primary)', fontSize: '13px' }}>
+                    Show unresolved only
+                  </span>
+                </label>
+                {pagination && (
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                    Page {pagination.page} of {pagination.total_pages} • {pagination.total_items} total
+                  </span>
+                )}
+              </div>
+              
+              {pagination && pagination.total_pages > 1 && (
+                <Pagination
+                  pagination={pagination}
+                  onPageChange={setPage}
+                />
+              )}
+            </div>
+
+            {/* Cards Table */}
+            {rows.length > 0 ? (
+              <div className="admin-table-container">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Card #</th>
+                      <th>Player(s)</th>
+                      <th>Team(s)</th>
+                      <th>Attributes</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(row => {
+                      // Merge original data with any edits for display
+                      const edit = cardEdits[row.row_id]
+                      const base = edit ? {
+                        ...row.data,
+                        ...(edit.card_number !== undefined && { card_number: edit.card_number }),
+                        ...(edit.card_type !== undefined && { card_type: edit.card_type }),
+                        ...(edit.is_rookie !== undefined && { is_rookie: edit.is_rookie }),
+                        ...(edit.is_first !== undefined && { is_first: edit.is_first }),
+                        ...(edit.is_autograph !== undefined && { is_autograph: edit.is_autograph }),
+                        ...(edit.players !== undefined && { players: edit.players })
+                      } : row.data
+                      
+                      const playerNames = Array.from(new Set((base.players||[]).map(p => p.name).filter(Boolean)))
+                      const teamNames = Array.from(new Set((base.players||[]).map(p => p.team_name).filter(Boolean)))
+                      const unresolvedPlayers = playerNames.filter(n => !players[n]?.selection).length
+                      const unresolvedTeams = teamNames.filter(n => !teams[n]?.selection).length
+                      const totalUnresolved = unresolvedPlayers + unresolvedTeams
+                      
+                      return (
+                        <tr key={row.row_id} className={cardEdits[row.row_id] ? 'edited-row' : ''}>
+                          <td>
+                            <div style={{ fontWeight: '500' }}>
+                              {base.card_number || row.row_index}
+                            </div>
+                            {(base.title || base.subset) && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                {[base.title, base.subset].filter(Boolean).join(' • ')}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {playerNames.length > 0 ? (
+                              <div style={{ fontSize: '12px' }}>
+                                {playerNames.slice(0,2).join(', ')}{playerNames.length > 2 && ` +${playerNames.length-2} more`}
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '12px' }}>None</span>
+                            )}
+                          </td>
+                          <td>
+                            {teamNames.length > 0 ? (
+                              <div style={{ fontSize: '12px' }}>
+                                {teamNames.slice(0,2).join(', ')}{teamNames.length > 2 && ` +${teamNames.length-2} more`}
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '12px' }}>None</span>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {base.is_rookie && (
+                                <span style={{ 
+                                  fontSize: '10px', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '10px', 
+                                  backgroundColor: '#2563eb', 
+                                  color: 'white' 
+                                }}>Rookie</span>
+                              )}
+                              {base.is_first && (
+                                <span style={{ 
+                                  fontSize: '10px', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '10px', 
+                                  backgroundColor: '#4f46e5', 
+                                  color: 'white' 
+                                }}>First</span>
+                              )}
+                              {base.is_autograph && (
+                                <span style={{ 
+                                  fontSize: '10px', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '10px', 
+                                  backgroundColor: '#db2777', 
+                                  color: 'white' 
+                                }}>Auto</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {cardEdits[row.row_id] && (
+                                <span style={{ 
+                                  fontSize: '10px', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '10px', 
+                                  backgroundColor: '#3b82f6', 
+                                  color: 'white' 
+                                }}>EDITED</span>
+                              )}
+                              {totalUnresolved > 0 ? (
+                                <span style={{ 
+                                  fontSize: '10px', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '10px', 
+                                  backgroundColor: '#d97706', 
+                                  color: 'white' 
+                                }}>{totalUnresolved} unresolved</span>
+                              ) : (
+                                <span style={{ 
+                                  fontSize: '10px', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '10px', 
+                                  backgroundColor: '#059669', 
+                                  color: 'white' 
+                                }}>Resolved</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="admin-table-actions">
+                              <button
+                                onClick={() => approveCardRow(row)}
+                                className="btn-small btn-edit"
+                                title="Auto-approve with high-confidence matches"
+                              >
+                                ✓ Approve
+                              </button>
+                              <button
+                                onClick={() => onCardEdit(row)}
+                                className="btn-small btn-edit"
+                                title="Edit card details and resolve entities"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                {showUnresolvedOnly ? 'No unresolved cards in this section' : 'No cards found'}
+              </div>
+            )}
+
+            {/* Bottom Pagination */}
+            {pagination && pagination.total_pages > 1 && (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                marginTop: '20px',
+                padding: '12px',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px'
+              }}>
+                <Pagination
+                  pagination={pagination}
+                  onPageChange={setPage}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 export const ImportResolvePage = () => {
   const { batchId } = useParams<{ batchId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const idNum = Number(batchId)
-  const { initialize, unresolvedCount, buildResolveRequest, markClean, setErrors, unresolvedByKind, autoSelectTop, setCardEdit, removeCardEdit, cardEdits, players, teams } = useImportResolutionStore()
-  const [autoThreshold, setAutoThreshold] = useState(98)
-  const [search, setSearch] = useState('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showUnresolvedOnly, setShowUnresolvedOnly] = useState(false)
+  const { initialize, unresolvedCount, buildResolveRequest, setErrors, unresolvedByKind, cardEdits, setCardEdit, removeCardEdit } = useImportResolutionStore()
   const [activeRow, setActiveRow] = useState<CardRow | null>(null)
   const [cardTypeParallels, setCardTypeParallels] = useState<Record<string, ImportParallelRef[]>>({})
   const [parallelModalCardType, setParallelModalCardType] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
-  const [totalItems, setTotalItems] = useState(0)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // Try enhanced preview groups first, fallback to legacy if not available
+  // Get the preview groups for metadata and candidates
   const groupsQuery = useQuery({ 
     queryKey: ['import','batch',idNum,'groups'], 
     queryFn: async () => {
       try {
         return await importService.getPreviewGroupsEnhanced(idNum)
       } catch {
-        // Fallback to legacy endpoint
         return await importService.getPreviewGroups(idNum)
       }
     }, 
     enabled: !!idNum 
   })
-  const rowsQuery = useQuery({ queryKey: ['import','batch',idNum,'rows'], queryFn: () => importService.getCardRows(idNum), enabled: !!idNum })
 
-  useEffect(()=>{ if (groupsQuery.data) initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names) }, [groupsQuery.data, idNum, initialize])
+  // Get card types with metadata using the new dedicated endpoint
+  const cardTypesQuery = useQuery({
+    queryKey: ['import', 'batch', idNum, 'card-types'],
+    queryFn: () => importService.getBatchCardTypes(idNum),
+    enabled: !!idNum
+  })
 
-  // derive filtered rows grouped by card type
-  const filteredByType = useMemo(() => {
-    if (!rowsQuery.data) return {}
-    
-    const rows = rowsQuery.data.rows.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number))
-    const term = search.trim().toLowerCase()
-    
-    const filtered = rows.filter(r => {
-      const num = r.data.card_number || ''
-      const title = r.data.title || ''
-      const subset = r.data.subset || ''
-      const cardType = r.data.card_type || 'Other'
-      const unresolvedPlayers = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean))).filter(n=>!players[n]?.selection).length
-      const unresolvedTeams = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean))).filter(n=>!teams[n]?.selection).length
-      const unresolvedTotal = unresolvedPlayers + unresolvedTeams
-      if (showUnresolvedOnly && unresolvedTotal === 0) return false
-      if (!term) return true
-      return [num,title,subset,cardType].some(v => v.toLowerCase().includes(term))
-    })
-    
-    // Group by card type
-    const byType: Record<string, CardRow[]> = {}
-    filtered.forEach(r => {
-      const ct = r.data.card_type || 'Other'
-      if (!byType[ct]) byType[ct] = []
-      byType[ct].push(r)
-    })
-    
-    // Update total items for info display
-    const newTotalItems = filtered.length
-    if (newTotalItems !== totalItems) {
-      setTotalItems(newTotalItems)
+  const cardTypes = cardTypesQuery.data?.card_types || []
+
+  useEffect(() => {
+    if (groupsQuery.data) {
+      initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names)
     }
-    
-    return byType
-  }, [rowsQuery.data, search, showUnresolvedOnly, players, teams, totalItems])
-  
-  // Initialize card type parallels from the groups data
+  }, [groupsQuery.data, idNum, initialize])
+
+  // Initialize card type parallels from the new card types endpoint
+  useEffect(() => {
+    if (cardTypesQuery.data?.card_types) {
+      const initialParallels: Record<string, ImportParallelRef[]> = {}
+      cardTypesQuery.data.card_types.forEach((ct: CardTypeInfo) => {
+        initialParallels[ct.card_type] = ct.parallels || []
+      })
+      setCardTypeParallels(initialParallels)
+    }
+  }, [cardTypesQuery.data])
+
+  // Legacy fallback for groups data
   useEffect(() => {
     const g: any = groupsQuery.data
-    if (!g) return
+    if (!g || cardTypesQuery.data) return // Skip if we have card types data
+    
     if (Array.isArray(g.card_types) && g.card_types.length > 0) {
       const initialParallels: Record<string, ImportParallelRef[]> = {}
       g.card_types.forEach((ct: any) => {
@@ -818,23 +1194,47 @@ export const ImportResolvePage = () => {
       })
       setCardTypeParallels(initialParallels)
     }
-  }, [groupsQuery.data])
+  }, [groupsQuery.data, cardTypesQuery.data])
 
   const resolveMutation = useMutation({
-    mutationFn: async () => { const body = buildResolveRequest(); if (!body.players && !body.teams && !body.card_edits) throw new Error('No pending changes'); return importService.resolve(idNum, body) },
-    onSuccess: () => { const dirtyPlayers = Object.values(players).filter(p=>p.dirty).map(p=>p.raw); const dirtyTeams = Object.values(teams).filter(t=>t.dirty).map(t=>t.raw); markClean('player', dirtyPlayers); markClean('team', dirtyTeams) }
+    mutationFn: async () => { 
+      const body = buildResolveRequest()
+      if (!body.players && !body.teams && !body.card_edits) throw new Error('No pending changes')
+      return importService.resolve(idNum, body) 
+    },
+    onSuccess: () => { 
+      const { players, teams } = useImportResolutionStore.getState()
+      const dirtyPlayers = Object.values(players).filter(p=>p.dirty).map(p=>p.raw)
+      const dirtyTeams = Object.values(teams).filter(t=>t.dirty).map(t=>t.raw)
+      useImportResolutionStore.getState().markClean('player', dirtyPlayers)
+      useImportResolutionStore.getState().markClean('team', dirtyTeams)
+      // Invalidate all row queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'] })
+    }
   })
+
   const commitMutation = useMutation({
     mutationFn: () => importService.commit(idNum),
-    onSuccess: () => { alert('Commit successful'); },
-    onError: (e: any) => { const msg = e.message||'Commit failed'; if (/unresolved/i.test(msg)) { const names = msg.match(/\[(.*?)\]/)?.[1]?.split(',').map((s: string)=>s.replace(/['"\s]/g,''))||[]; setErrors('player', names); setErrors('team', names) } alert(msg) }
+    onSuccess: () => { 
+      alert('Commit successful')
+      navigate('/admin/imports/batches')
+    },
+    onError: (e: any) => { 
+      const msg = e.message||'Commit failed'
+      if (/unresolved/i.test(msg)) { 
+        const names = msg.match(/\[(.*?)\]/)?.[1]?.split(',').map((s: string)=>s.replace(/['"\s]/g,''))||[]
+        setErrors('player', names)
+        setErrors('team', names) 
+      } 
+      alert(msg) 
+    }
   })
 
   const deleteMutation = useMutation({
     mutationFn: () => importService.deleteBatch(idNum),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['import','pending-batches'] })
-      navigate('/admin/imports')
+      navigate('/admin/imports/batches')
     },
     onError: (error) => {
       console.error('Delete failed:', error)
@@ -842,78 +1242,27 @@ export const ImportResolvePage = () => {
     }
   })
 
-  if (groupsQuery.isLoading || rowsQuery.isLoading) return (
+  if (groupsQuery.isLoading || cardTypesQuery.isLoading) return (
     <div className="dashboard-container min-h-screen flex flex-col">
       <AppNavbar title="Resolve Import" subtitle="Loading batch…" />
       <div className="dashboard-main" style={{ paddingTop:'32px' }}>
         <div className="flex items-center justify-center h-64 flex-col gap-4 text-sm text-gray-400">
           <div className="w-10 h-10 border-4 border-gray-700 border-t-blue-500 rounded-full animate-spin" aria-label="Loading spinner" />
-          <span>Loading data…</span>
+          <span>Loading batch data…</span>
         </div>
       </div>
     </div>
   )
-  if (groupsQuery.error || rowsQuery.error) return <div className="p-6 text-red-500 text-sm">Error loading batch</div>
-  if (!groupsQuery.data || !rowsQuery.data) return (
-    <div className="dashboard-container min-h-screen flex flex-col">
-      <AppNavbar title="Resolve Import" subtitle="Loading batch…" />
-      <div className="dashboard-main" style={{ paddingTop:'32px' }}>
-        <div className="flex items-center justify-center h-64 flex-col gap-4 text-sm text-gray-400">
-          <div className="w-10 h-10 border-4 border-gray-700 border-t-blue-500 rounded-full animate-spin" aria-label="Loading spinner" />
-          <span>Loading data…</span>
-        </div>
-      </div>
-    </div>
-  )
+
+  if (groupsQuery.error || cardTypesQuery.error) return <div className="p-6 text-red-500 text-sm">Error loading batch</div>
+  if (!groupsQuery.data || !cardTypesQuery.data) return <div className="p-6 text-gray-500 text-sm">No batch data found</div>
 
   const groups: any = groupsQuery.data
-  const rows = rowsQuery.data?.rows?.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number)) || []
-  const playerCandidatesMap: Record<string, Candidate[]> = groups?.player_candidates || {}
-  const teamCandidatesMap: Record<string, Candidate[]> = groups?.team_candidates || {}
-
+  const batchTotals = cardTypesQuery.data?.totals
   const unresolved = unresolvedCount()
   const playerUnresolved = unresolvedByKind('player')
   const teamUnresolved = unresolvedByKind('team')
 
-
-  const approveCardRow = (row: CardRow, playerCandidates: Record<string, Candidate[]>, teamCandidates: Record<string, Candidate[]>) => {
-    const store = useImportResolutionStore.getState()
-    const playerNames = Array.from(new Set((row.data.players||[]).map(p=>p.name).filter(Boolean)))
-    const teamNames = Array.from(new Set((row.data.players||[]).map(p=>p.team_name).filter(Boolean)))
-    const threshold = autoThreshold
-    
-    // Resolve players - use existing if high confidence, otherwise create new
-    playerNames.forEach(raw => {
-      if (!store.players[raw]?.selection) {
-        const best = (playerCandidates[raw]||[]).slice().sort((a,b)=>b.score-a.score)[0]
-        if (best && best.score >= threshold) {
-          store.select('player', raw, { kind:'player', raw, existingId: best.id, canonical: best.name })
-        } else {
-          // Create new player if no high-confidence match
-          store.select('player', raw, { kind:'player', raw, create: raw })
-        }
-      }
-    })
-    
-    // Resolve teams - use existing if high confidence, otherwise create new
-    teamNames.forEach(raw => {
-      if (!store.teams[raw]?.selection) {
-        const best = (teamCandidates[raw]||[]).slice().sort((a,b)=>b.score-a.score)[0]
-        if (best && best.score >= threshold) {
-          store.select('team', raw, { kind:'team', raw, existingId: best.id, canonical: best.name })
-        } else {
-          // Create new team if no high-confidence match
-          store.select('team', raw, { kind:'team', raw, create: raw })
-        }
-      }
-    })
-  }
-  const onApprove = (row: CardRow) => approveCardRow(row, playerCandidatesMap, teamCandidatesMap)
-  
-  const approveAllInSection = (cardType: string, rows: CardRow[]) => {
-    rows.forEach(row => approveCardRow(row, playerCandidatesMap, teamCandidatesMap))
-  }
-  
   const toggleSection = (cardType: string) => {
     setCollapsedSections(prev => ({
       ...prev,
@@ -928,19 +1277,13 @@ export const ImportResolvePage = () => {
     }))
     
     // Apply these parallels to all cards of this type
-    const cardsOfType = rows.filter(row => (row.data.card_type || 'Other') === cardType)
-    cardsOfType.forEach(row => {
-      setCardEdit(row.row_id, {
-        row_id: row.row_id,
-        parallels: parallels
-      })
-    })
+    // Note: This would require a separate API call to bulk update cards
+    // For now, we'll just update the local state
   }
-
 
   return (
     <div className="dashboard-container">
-      <AppNavbar title="Resolve Import" subtitle={`Batch ${idNum} • Card-focused resolution`} />
+      <AppNavbar title="Resolve Import" subtitle={`Batch ${idNum} • Paginated card resolution`} />
       <div className="dashboard-main" style={{ paddingTop:'32px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -948,11 +1291,13 @@ export const ImportResolvePage = () => {
               {groups?.metadata?.brand || ''} {groups?.metadata?.set_name || ''} {groups?.metadata?.year || ''}
             </h2>
             {(resolveMutation.isPending || commitMutation.isPending || deleteMutation.isPending) && <div className="loading-spinner"></div>}
-            {totalItems > 0 && (
-              <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                {totalItems.toLocaleString()} cards • {unresolved} unresolved
-              </span>
-            )}
+            <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+              {batchTotals ? (
+                `${batchTotals.total_cards.toLocaleString()} cards • ${batchTotals.total_unresolved} unresolved • ${cardTypes.length} types`
+              ) : (
+                `${unresolved} unresolved • ${cardTypes.length} card types`
+              )}
+            </span>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button 
@@ -982,287 +1327,77 @@ export const ImportResolvePage = () => {
           </div>
         </div>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <div style={{ flex: '1', maxWidth: '400px' }}>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Search card #, title, subset, or type..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ margin: 0 }}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '12px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Auto ≥</span>
-              <input 
-                type="number" 
-                min={50} 
-                max={100} 
-                value={autoThreshold} 
-                onChange={e=>setAutoThreshold(Number(e.target.value))} 
-                style={{ width: '60px', padding: '2px 4px', border: '1px solid var(--border-secondary)', borderRadius: '4px', backgroundColor: 'var(--input-bg)', fontSize: '12px' }}
-              />
-              <button 
-                onClick={()=>{ const p = autoSelectTop('player', playerCandidatesMap, autoThreshold); const t = autoSelectTop('team', teamCandidatesMap, autoThreshold); if(!p && !t) alert('No matches met threshold')}} 
-                className="btn-secondary"
-                style={{ padding: '4px 8px', fontSize: '11px' }}
-              >
-                Run
-              </button>
-            </div>
-            {search && (
-              <button 
-                onClick={() => setSearch('')}
-                style={{
-                  padding: '8px 12px',
-                  background: 'none',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '6px',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer'
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-        
         <div style={{ marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-            <input 
-              type="checkbox" 
-              checked={showUnresolvedOnly} 
-              onChange={e=>setShowUnresolvedOnly(e.target.checked)} 
-              className="accent-blue-600" 
-            />
-            <span style={{ color: 'var(--text-primary)', fontSize: '14px' }}>Show unresolved only</span>
-          </label>
           <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Players: {playerUnresolved} unresolved</span>
           <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Teams: {teamUnresolved} unresolved</span>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Edits: {Object.keys(cardEdits).length}</span>
         </div>
+
         {/* Card Type Sections */}
-        <div className="space-y-10">
-          {Object.entries(filteredByType).map(([cardType, list]) => {
-            const isCollapsed = collapsedSections[cardType]
-            const editCount = list.reduce((acc, r) => acc + (cardEdits[r.row_id] ? 1 : 0), 0)
-            const unresolvedCount = list.reduce((acc, r) => {
-              const playerNames = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean)))
-              const teamNames = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean)))
-              const unresolvedPlayers = playerNames.filter(n => !players[n]?.selection).length
-              const unresolvedTeams = teamNames.filter(n => !teams[n]?.selection).length
-              return acc + unresolvedPlayers + unresolvedTeams
-            }, 0)
-            
-            return (
-              <div key={cardType} className={`collapsible-card ${!isCollapsed ? 'open' : ''}`}>
-                <div className="collapsible-card-header">
-                  <div className="collapsible-card-left">
-                    <button
-                      type="button"
-                      onClick={() => toggleSection(cardType)}
-                      aria-expanded={!isCollapsed}
-                      aria-controls={`section-${cardType}`}
-                      className="collapsible-card-toggle"
-                      title={isCollapsed ? `Expand ${cardType}` : `Collapse ${cardType}`}
-                    >
-                      <span className="collapsible-card-toggle-icon">▸</span>
-                    </button>
-                    <div className="collapsible-card-title-row">
-                      <h2 className="collapsible-card-title">{cardType}</h2>
-                      <span className="collapsible-card-badge">{list.length} cards</span>
-                      <span className="collapsible-card-badge edits">{editCount} edits</span>
-                      <span className={`collapsible-card-badge ${unresolvedCount>0 ? 'unresolved' : 'resolved'}`}>
-                        {unresolvedCount>0 ? `${unresolvedCount} unresolved` : 'All resolved'}
-                      </span>
-                      <span className="collapsible-card-badge parallels">
-                        {(cardTypeParallels[cardType] || []).length} parallels
-                      </span>
-                    </div>
-                  </div>
-                  <div className="collapsible-card-actions">
-                    <button
-                      onClick={() => setParallelModalCardType(cardType)}
-                      className="dashboard-card-button small gradient-indigo"
-                    >
-                      ⚡ Parallels
-                    </button>
-                    <button
-                      onClick={() => approveAllInSection(cardType, list)}
-                      className="dashboard-card-button small gradient-emerald"
-                    >
-                      ✓ Approve All
-                    </button>
-                  </div>
-                </div>
-                {!isCollapsed && (
-                  <div
-                    id={`section-${cardType}`}
-                    className="collapsible-card-collapsible"
-                    role="region"
-                    aria-label={`${cardType} cards`}
-                  >
-                    <div className="collapsible-card-inner">
-                      <div className="admin-table-container">
-                        <table className="admin-table">
-                          <thead>
-                            <tr>
-                              <th>Card #</th>
-                              <th>Player(s)</th>
-                              <th>Team(s)</th>
-                              <th>Attributes</th>
-                              <th>Status</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {list.map(row => {
-                              const base = row.data
-                              const playerNames = Array.from(new Set((base.players||[]).map(p => p.name).filter(Boolean)))
-                              const teamNames = Array.from(new Set((base.players||[]).map(p => p.team_name).filter(Boolean)))
-                              const unresolvedPlayers = playerNames.filter(n => !players[n]?.selection).length
-                              const unresolvedTeams = teamNames.filter(n => !teams[n]?.selection).length
-                              const totalUnresolved = unresolvedPlayers + unresolvedTeams
-                              const existingEdit = cardEdits[row.row_id]
-                              
-                              return (
-                                <tr key={row.row_id}>
-                                  <td>
-                                    <div style={{ fontWeight: '500' }}>{base.card_number || row.row_index}</div>
-                                    {(base.title || base.subset) && (
-                                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                        {[base.title, base.subset].filter(Boolean).join(' • ')}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td>
-                                    {playerNames.length > 0 ? (
-                                      <div style={{ fontSize: '12px' }}>
-                                        {playerNames.slice(0,2).join(', ')}{playerNames.length > 2 && ` +${playerNames.length-2} more`}
-                                      </div>
-                                    ) : (
-                                      <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '12px' }}>None</span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    {teamNames.length > 0 ? (
-                                      <div style={{ fontSize: '12px' }}>
-                                        {teamNames.slice(0,2).join(', ')}{teamNames.length > 2 && ` +${teamNames.length-2} more`}
-                                      </div>
-                                    ) : (
-                                      <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '12px' }}>None</span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                      {base.is_rookie && (
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          padding: '2px 6px', 
-                                          borderRadius: '10px', 
-                                          backgroundColor: '#2563eb', 
-                                          color: 'white' 
-                                        }}>Rookie</span>
-                                      )}
-                                      {base.is_first && (
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          padding: '2px 6px', 
-                                          borderRadius: '10px', 
-                                          backgroundColor: '#4f46e5', 
-                                          color: 'white' 
-                                        }}>First</span>
-                                      )}
-                                      {base.is_autograph && (
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          padding: '2px 6px', 
-                                          borderRadius: '10px', 
-                                          backgroundColor: '#db2777', 
-                                          color: 'white' 
-                                        }}>Auto</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                      {existingEdit && (
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          padding: '2px 6px', 
-                                          borderRadius: '10px', 
-                                          backgroundColor: '#4f46e5', 
-                                          color: 'white' 
-                                        }}>Edited</span>
-                                      )}
-                                      {totalUnresolved > 0 ? (
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          padding: '2px 6px', 
-                                          borderRadius: '10px', 
-                                          backgroundColor: '#d97706', 
-                                          color: 'white' 
-                                        }}>{totalUnresolved} unresolved</span>
-                                      ) : (
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          padding: '2px 6px', 
-                                          borderRadius: '10px', 
-                                          backgroundColor: '#059669', 
-                                          color: 'white' 
-                                        }}>Resolved</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td>
-                                    <div className="admin-table-actions">
-                                      <button
-                                        onClick={() => onApprove(row)}
-                                        className="btn-small btn-edit"
-                                        title="Auto-approve with high-confidence matches"
-                                      >
-                                        ✓ Approve
-                                      </button>
-                                      <button
-                                        onClick={() => setActiveRow(row)}
-                                        className="btn-small btn-edit"
-                                        title="Edit card details and resolve entities"
-                                      >
-                                        Edit
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          {Object.keys(filteredByType).length === 0 && (
+        <div className="space-y-6">
+          {cardTypes.map((cardTypeInfo: CardTypeInfo, index: number) => (
+            <CardTypeSection
+              key={cardTypeInfo.card_type || `card-type-${index}`}
+              batchId={idNum}
+              cardTypeInfo={cardTypeInfo}
+              groups={groups}
+              onCardEdit={setActiveRow}
+              onParallelEdit={setParallelModalCardType}
+              cardEdits={cardEdits}
+              isCollapsed={collapsedSections[cardTypeInfo.card_type] || false}
+              onToggleCollapse={() => toggleSection(cardTypeInfo.card_type)}
+            />
+          ))}
+          {cardTypes.length === 0 && (
             <div className="text-sm text-gray-400 text-center py-20 border border-dashed border-gray-700 rounded-lg">
-              No cards match your filters.
+              No card types found in this batch.
             </div>
           )}
         </div>
+
+        {/* Edit Modal */}
         {activeRow && (
           <CardEditModal
             row={activeRow}
             groups={groups}
-            allRows={rows}
+            allRows={cardTypes.reduce((acc: CardRow[], ct: CardTypeInfo) => {
+              // Get card types for dropdown options
+              const mockRow: CardRow = {
+                row_id: -1,
+                row_index: 0,
+                data: {
+                  card_number: '',
+                  card_type: ct.card_type,
+                  title: '',
+                  subset: '',
+                  notes: '',
+                  is_rookie: false,
+                  is_first: false,
+                  is_autograph: false,
+                  players: [],
+                  parallel_names: []
+                },
+                resolution_status: 'unresolved'
+              }
+              return [...acc, mockRow]
+            }, [])}
             existingEdit={cardEdits[activeRow.row_id]}
-            saveEdit={(edit)=>{ if (edit) setCardEdit(activeRow.row_id, edit); else removeCardEdit(activeRow.row_id) }}
-            onClose={()=>setActiveRow(null)}
+            saveEdit={(edit) => { 
+              if (edit) {
+                setCardEdit(activeRow.row_id, edit)
+              } else {
+                removeCardEdit(activeRow.row_id)
+              }
+              setActiveRow(null)
+              // Invalidate queries to refresh the data without full page reload
+              queryClient.invalidateQueries({ 
+                queryKey: ['import', 'batch', idNum, 'rows'] 
+              })
+            }}
+            onClose={() => setActiveRow(null)}
           />
         )}
+
+        {/* Parallel Modal */}
         {parallelModalCardType && (
           <ParallelEditModal
             cardType={parallelModalCardType}
@@ -1298,9 +1433,6 @@ export const ImportResolvePage = () => {
                   <div><strong>{groups?.metadata?.brand} {groups?.metadata?.set_name}</strong></div>
                   <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
                     {groups?.metadata?.year} • Batch #{idNum}
-                  </div>
-                  <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                    {rows?.length || 0} cards • {unresolved} unresolved
                   </div>
                 </div>
               </div>

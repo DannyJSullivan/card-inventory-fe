@@ -280,3 +280,25 @@ export interface BatchRowsResponse {
   pagination: PaginationInfo
   rows: RowData[]
 }
+
+// New card types endpoint response
+export interface CardTypeInfo {
+  card_type: string
+  total_cards: number
+  resolved_cards: number
+  unresolved_cards: number
+  resolution_percentage: number
+  parallels: ImportParallelRef[]
+}
+
+export interface BatchCardTypesResponse {
+  batch_id: number
+  card_types: CardTypeInfo[]
+  totals: {
+    total_card_types: number
+    total_cards: number
+    total_resolved: number
+    total_unresolved: number
+    overall_completion: number
+  }
+}

@@ -212,4 +212,14 @@ export const importService = {
     }
     return res.json()
   },
+
+  // Get card types with metadata for a batch
+  async getBatchCardTypes(batchId: number): Promise<any> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/card-types`)
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.detail || 'Fetch card types failed')
+    }
+    return res.json()
+  },
 }
