@@ -5,7 +5,6 @@ import { importService } from '../services/imports'
 import { useImportResolutionStore } from '../stores/importResolution'
 import type { Candidate, CardRow, CardEditPayload, ImportPlayerRef, ImportParallelRef, GroupedPreviewResponse } from '../types/imports'
 import { AppNavbar } from '../components/ui/AppNavbar'
-import { DynamicTeamResolution } from '../components/DynamicTeamResolution'
 import '../components/CardEditModal.css'
 import '../components/CollapsibleCard.css'
 
@@ -14,6 +13,11 @@ const parseCardNum = (val: string | null | undefined): number => {
   if (!val) return Number.MAX_SAFE_INTEGER
   const m = String(val).match(/\d+/)
   return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER
+}
+
+// Helper: format score without trailing zeros
+const formatScore = (score: number): string => {
+  return parseFloat(score.toFixed(2)).toString()
 }
 
 
@@ -349,7 +353,7 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
                                   cursor: 'pointer'
                                 }}
                               >
-                                {c.name} <span style={{ opacity: 0.7 }}>({c.score})</span>
+                                {c.name} <span style={{ opacity: 0.7 }}>({formatScore(c.score)})</span>
                               </button>
                             )
                           })}
@@ -388,7 +392,7 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
                                 cursor: 'pointer'
                               }}
                             >
-                              🗑️ Clear
+                              Clear
                             </button>
                           )}
                         </div>
@@ -429,16 +433,119 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
                   backgroundColor: 'var(--bg-tertiary)',
                   borderRadius: '8px'
                 }}>
-                  {teamNames.map(raw => (
-                    <DynamicTeamResolution
-                      key={raw}
-                      teamName={raw}
-                      sport={groups.metadata?.sport || 'Baseball'}
-                      teamState={teams[raw]}
-                      onSelect={select}
-                      onClear={clear}
-                    />
-                  ))}
+                  {teamNames.map(raw => {
+                    const st = teams[raw]
+                    const candidates = groups.team_candidates[raw] || []
+                    const unresolved = !st?.selection
+                    return (
+                      <div key={raw} style={{ 
+                        padding: '12px', 
+                        backgroundColor: 'var(--bg-card)', 
+                        border: '1px solid var(--border-primary)', 
+                        borderRadius: '8px' 
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>{raw}</span>
+                          {st?.selection && 'existingId' in st.selection && (
+                            <span style={{ 
+                              fontSize: '10px', 
+                              padding: '4px 8px', 
+                              borderRadius: '12px', 
+                              backgroundColor: '#059669', 
+                              color: 'white', 
+                              fontWeight: '500' 
+                            }}>
+                              ✅ Linked
+                            </span>
+                          )}
+                          {st?.selection && 'create' in st.selection && (
+                            <span style={{ 
+                              fontSize: '10px', 
+                              padding: '4px 8px', 
+                              borderRadius: '12px', 
+                              backgroundColor: '#2563eb', 
+                              color: 'white', 
+                              fontWeight: '500' 
+                            }}>
+                              🆕 New
+                            </span>
+                          )}
+                          {unresolved && (
+                            <span style={{ 
+                              fontSize: '10px', 
+                              padding: '4px 8px', 
+                              borderRadius: '12px', 
+                              backgroundColor: '#d97706', 
+                              color: 'white', 
+                              fontWeight: '500' 
+                            }}>
+                              ⚠️ Pending
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                          {candidates.slice(0,6).map((c: any) => {
+                            const selected = st?.selection && 'existingId' in st.selection && st.selection.existingId === c.id
+                            return (
+                              <button 
+                                key={c.id} 
+                                onClick={() => select('team', raw, { kind:'team', raw, existingId: c.id, canonical: c.name })} 
+                                style={{
+                                  padding: '4px 8px', 
+                                  borderRadius: '6px', 
+                                  fontSize: '11px', 
+                                  border: '1px solid var(--border-secondary)',
+                                  backgroundColor: selected ? '#4f46e5' : 'var(--button-bg)',
+                                  color: selected ? 'white' : 'var(--text-tertiary)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {c.name} <span style={{ opacity: 0.7 }}>({formatScore(c.score)})</span>
+                              </button>
+                            )
+                          })}
+                          {candidates.length === 0 && (
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                              No candidates
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button 
+                            onClick={() => select('team', raw, { kind:'team', raw, create: raw })} 
+                            style={{
+                              fontSize: '11px', 
+                              padding: '6px 12px', 
+                              borderRadius: '6px', 
+                              backgroundColor: '#2563eb', 
+                              color: 'white',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            🆕 Create New
+                          </button>
+                          {st?.selection && (
+                            <button 
+                              onClick={() => clear('team', raw)} 
+                              style={{
+                                fontSize: '11px', 
+                                padding: '6px 12px', 
+                                borderRadius: '6px', 
+                                backgroundColor: 'var(--button-bg)', 
+                                color: 'var(--text-tertiary)',
+                                border: '1px solid var(--border-secondary)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                   {teamNames.length === 0 && (
                     <div style={{ 
                       fontSize: '12px', 
@@ -835,40 +942,106 @@ export const ImportResolvePage = () => {
     <div className="dashboard-container">
       <AppNavbar title="Resolve Import" subtitle={`Batch ${idNum} • Card-focused resolution`} />
       <div className="dashboard-main" style={{ paddingTop:'32px' }}>
-        {/* Top Controls */}
-        <div className="dashboard-card" style={{ padding:'20px', marginBottom:'32px' }}>
-          {/* ...existing header area (brand, buttons)... */}
-          <div className="flex flex-wrap items-center gap-4 justify-between">
-            <div>
-              <h1 className="dashboard-card-title" style={{ fontSize:'20px' }}>{groups?.metadata?.brand || ''} {groups?.metadata?.set_name || ''} {groups?.metadata?.year || ''}</h1>
-              <p className="dashboard-card-description" style={{ marginTop:'4px' }}>Resolve players, teams & metadata directly per card.</p>
-            </div>
-            <div className="flex gap-3 flex-wrap items-center">
-              <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-[11px]">
-                <span>Auto ≥</span>
-                <input type="number" min={50} max={100} value={autoThreshold} onChange={e=>setAutoThreshold(Number(e.target.value))} className="w-16 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[11px]" />
-                <button onClick={()=>{ const p = autoSelectTop('player', playerCandidatesMap, autoThreshold); const t = autoSelectTop('team', teamCandidatesMap, autoThreshold); if(!p && !t) alert('No matches met threshold')}} className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[11px]">Run</button>
-              </div>
-              <button onClick={()=>resolveMutation.mutate()} disabled={resolveMutation.isPending} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#2563eb,#4f46e5)', opacity: resolveMutation.isPending ? .6:1 }}>{resolveMutation.isPending ? 'Applying…' : 'Apply Changes'}</button>
-              <button onClick={()=>commitMutation.mutate()} disabled={commitMutation.isPending || unresolved>0} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#059669,#10b981)', opacity: (commitMutation.isPending || unresolved>0)? .6:1 }}>{commitMutation.isPending ? 'Committing…' : `Commit (${unresolved})`}</button>
-              <button onClick={()=>setShowDeleteConfirm(true)} disabled={deleteMutation.isPending} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#dc2626,#b91c1c)', opacity: deleteMutation.isPending ? .6:1 }}>🗑️ Delete</button>
-            </div>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3 items-center text-[11px]">
-            <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded px-2 py-1">
-              <input placeholder="Search card # / title / subset / type" value={search} onChange={e=>setSearch(e.target.value)} className="bg-transparent outline-none text-[11px] w-56" />
-              {search && <button onClick={()=>setSearch('')} className="text-gray-400 hover:text-gray-200">✕</button>}
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={showUnresolvedOnly} onChange={e=>setShowUnresolvedOnly(e.target.checked)} className="accent-blue-600" /><span>Unresolved only</span></label>
-            <span className="text-gray-500">Players unresolved: {playerUnresolved}</span>
-            <span className="text-gray-500">Teams unresolved: {teamUnresolved}</span>
-            <span className="text-gray-500">Card edits: {Object.keys(cardEdits).length}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+              {groups?.metadata?.brand || ''} {groups?.metadata?.set_name || ''} {groups?.metadata?.year || ''}
+            </h2>
+            {(resolveMutation.isPending || commitMutation.isPending || deleteMutation.isPending) && <div className="loading-spinner"></div>}
             {totalItems > 0 && (
-              <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
-                {totalItems.toLocaleString()} total cards
+              <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                {totalItems.toLocaleString()} cards • {unresolved} unresolved
               </span>
             )}
           </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '12px' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Auto ≥</span>
+              <input 
+                type="number" 
+                min={50} 
+                max={100} 
+                value={autoThreshold} 
+                onChange={e=>setAutoThreshold(Number(e.target.value))} 
+                style={{ width: '60px', padding: '2px 4px', border: '1px solid var(--border-secondary)', borderRadius: '4px', backgroundColor: 'var(--input-bg)', fontSize: '12px' }}
+              />
+              <button 
+                onClick={()=>{ const p = autoSelectTop('player', playerCandidatesMap, autoThreshold); const t = autoSelectTop('team', teamCandidatesMap, autoThreshold); if(!p && !t) alert('No matches met threshold')}} 
+                className="btn-secondary"
+                style={{ padding: '4px 8px', fontSize: '11px' }}
+              >
+                Run
+              </button>
+            </div>
+            <button 
+              onClick={()=>resolveMutation.mutate()} 
+              disabled={resolveMutation.isPending} 
+              className="btn-primary"
+              style={{ padding: '8px 16px' }}
+            >
+              {resolveMutation.isPending ? 'Applying...' : 'Apply Changes'}
+            </button>
+            <button 
+              onClick={()=>commitMutation.mutate()} 
+              disabled={commitMutation.isPending || unresolved>0} 
+              className="btn-primary"
+              style={{ padding: '8px 16px', backgroundColor: unresolved > 0 ? 'var(--text-secondary)' : 'var(--accent-success)' }}
+            >
+              {commitMutation.isPending ? 'Committing...' : `Commit (${unresolved})`}
+            </button>
+            <button 
+              onClick={()=>setShowDeleteConfirm(true)} 
+              disabled={deleteMutation.isPending} 
+              className="btn-secondary"
+              style={{ padding: '8px 16px', color: 'var(--accent-error)', borderColor: 'var(--accent-error)' }}
+            >
+              Delete Batch
+            </button>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ flex: '1', maxWidth: '400px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search card #, title, subset, or type..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ margin: 0 }}
+            />
+          </div>
+          {search && (
+            <button 
+              onClick={() => setSearch('')}
+              style={{
+                marginLeft: '12px',
+                padding: '8px 12px',
+                background: 'none',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer'
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        
+        <div style={{ marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input 
+              type="checkbox" 
+              checked={showUnresolvedOnly} 
+              onChange={e=>setShowUnresolvedOnly(e.target.checked)} 
+              className="accent-blue-600" 
+            />
+            <span style={{ color: 'var(--text-primary)', fontSize: '14px' }}>Show unresolved only</span>
+          </label>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Players: {playerUnresolved} unresolved</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Teams: {teamUnresolved} unresolved</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Edits: {Object.keys(cardEdits).length}</span>
         </div>
         {/* Card Type Sections */}
         <div className="space-y-10">
