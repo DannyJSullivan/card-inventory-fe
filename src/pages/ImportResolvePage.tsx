@@ -955,6 +955,45 @@ export const ImportResolvePage = () => {
             )}
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              onClick={()=>resolveMutation.mutate()} 
+              disabled={resolveMutation.isPending} 
+              className="btn-primary"
+              style={{ padding: '8px 16px', whiteSpace: 'nowrap' }}
+            >
+              {resolveMutation.isPending ? 'Applying...' : 'Apply Changes'}
+            </button>
+            <button 
+              onClick={()=>commitMutation.mutate()} 
+              disabled={commitMutation.isPending || unresolved>0} 
+              className="btn-primary"
+              style={{ padding: '8px 16px', whiteSpace: 'nowrap', backgroundColor: unresolved > 0 ? 'var(--text-secondary)' : 'var(--accent-success)' }}
+            >
+              {commitMutation.isPending ? 'Committing...' : `Commit (${unresolved})`}
+            </button>
+            <button 
+              onClick={()=>setShowDeleteConfirm(true)} 
+              disabled={deleteMutation.isPending} 
+              className="btn-primary"
+              style={{ padding: '8px 16px', whiteSpace: 'nowrap', backgroundColor: 'var(--accent-error)', borderColor: 'var(--accent-error)' }}
+            >
+              Delete Batch
+            </button>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ flex: '1', maxWidth: '400px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search card #, title, subset, or type..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ margin: 0 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)', borderRadius: '6px', fontSize: '12px' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Auto ≥</span>
               <input 
@@ -973,60 +1012,22 @@ export const ImportResolvePage = () => {
                 Run
               </button>
             </div>
-            <button 
-              onClick={()=>resolveMutation.mutate()} 
-              disabled={resolveMutation.isPending} 
-              className="btn-primary"
-              style={{ padding: '8px 16px' }}
-            >
-              {resolveMutation.isPending ? 'Applying...' : 'Apply Changes'}
-            </button>
-            <button 
-              onClick={()=>commitMutation.mutate()} 
-              disabled={commitMutation.isPending || unresolved>0} 
-              className="btn-primary"
-              style={{ padding: '8px 16px', backgroundColor: unresolved > 0 ? 'var(--text-secondary)' : 'var(--accent-success)' }}
-            >
-              {commitMutation.isPending ? 'Committing...' : `Commit (${unresolved})`}
-            </button>
-            <button 
-              onClick={()=>setShowDeleteConfirm(true)} 
-              disabled={deleteMutation.isPending} 
-              className="btn-secondary"
-              style={{ padding: '8px 16px', color: 'var(--accent-error)', borderColor: 'var(--accent-error)' }}
-            >
-              Delete Batch
-            </button>
+            {search && (
+              <button 
+                onClick={() => setSearch('')}
+                style={{
+                  padding: '8px 12px',
+                  background: 'none',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '6px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear
+              </button>
+            )}
           </div>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <div style={{ flex: '1', maxWidth: '400px' }}>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Search card #, title, subset, or type..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ margin: 0 }}
-            />
-          </div>
-          {search && (
-            <button 
-              onClick={() => setSearch('')}
-              style={{
-                marginLeft: '12px',
-                padding: '8px 12px',
-                background: 'none',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer'
-              }}
-            >
-              Clear
-            </button>
-          )}
         </div>
         
         <div style={{ marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>

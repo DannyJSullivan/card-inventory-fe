@@ -8,7 +8,7 @@ interface AdminRouteProps {
 }
 
 export const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { isAuthenticated, isAdmin, isLoading, token, checkAuth, user } = useAuthStore()
+  const { isAuthenticated, isAdmin, isLoading, token, checkAuth } = useAuthStore()
 
   // Ensure we validate token on hard refresh before deciding
   useEffect(() => {
@@ -17,13 +17,26 @@ export const AdminRoute = ({ children }: AdminRouteProps) => {
     }
   }, [token, isAuthenticated, isLoading, checkAuth])
 
-  // Show loading if we're still authenticating OR if we have a token but no user data yet
-  if (isLoading || (token && isAuthenticated && !user)) {
+  // Always show loading if we have a token but are not authenticated (regardless of isLoading state)
+  // This handles the case where checkAuth() is running but isLoading isn't set properly
+  if (token && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" />
           <p className="mt-4 text-gray-400 text-sm">Authenticating…</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Also show loading if explicitly loading
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" />
+          <p className="mt-4 text-gray-400 text-sm">Loading…</p>
         </div>
       </div>
     )

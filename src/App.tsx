@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
@@ -20,12 +19,8 @@ import { PendingBatchesPage } from './pages/PendingBatchesPage'
 import CardSearchPage from './pages/CardSearchPage'
 
 function App() {
-  const { checkAuth, isAuthenticated } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
   
-  useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
-
   return (
     <ThemeProvider>
       <Router>

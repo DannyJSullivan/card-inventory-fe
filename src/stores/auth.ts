@@ -18,13 +18,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const data = await authService.refresh()
       authService.saveToken(data.access_token)
-      set({ token: data.access_token, isAuthenticated: true, error: null })
-      // optionally refresh user silently
+      set({ token: data.access_token, error: null })
+      // Get user data before setting isAuthenticated
       try { 
         const user = await authService.getCurrentUser()
         set({ user, isAuthenticated: true, error: null }) 
       } catch (userError) {
         console.warn('Failed to refresh user data after token refresh:', userError)
+        // If we can't get user data, don't mark as authenticated
+        set({ isAuthenticated: false, error: 'Failed to load user data' })
       }
     } catch (e) {
       console.warn('Token refresh failed, logging out')
