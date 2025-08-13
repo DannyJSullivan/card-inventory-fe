@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 
 interface UploadProgressProps {
   isUploading: boolean
-  mode: 'csv' | 'html' | 'image' | 'json'
+  mode: 'csv' | 'html' | 'image' | 'pdf' | 'json'
+  isMultiplePdf?: boolean
 }
 
-export const UploadProgress = ({ isUploading, mode }: UploadProgressProps) => {
+export const UploadProgress = ({ isUploading, mode, isMultiplePdf = false }: UploadProgressProps) => {
   const [progress, setProgress] = useState(0)
   const [stage, setStage] = useState('')
 
@@ -19,9 +20,22 @@ export const UploadProgress = ({ isUploading, mode }: UploadProgressProps) => {
     let interval: ReturnType<typeof setInterval>
     let timeoutId: ReturnType<typeof setTimeout>
 
-    if (mode === 'image') {
-      // Image processing stages with realistic timing
-      const stages = [
+    if (mode === 'image' || mode === 'pdf') {
+      // Image and PDF processing stages with realistic timing
+      const stages = mode === 'pdf' ? (isMultiplePdf ? [
+        { progress: 10, stage: 'Uploading PDF files...', duration: 4000 },
+        { progress: 30, stage: 'Merging PDF files...', duration: 6000 },
+        { progress: 50, stage: 'Reading merged content...', duration: 8000 },
+        { progress: 75, stage: 'Extracting card data...', duration: 12000 },
+        { progress: 90, stage: 'Validating data...', duration: 5000 },
+        { progress: 95, stage: 'Finalizing...', duration: 2000 }
+      ] : [
+        { progress: 10, stage: 'Uploading PDF...', duration: 3000 },
+        { progress: 40, stage: 'Reading PDF content...', duration: 8000 },
+        { progress: 70, stage: 'Extracting card data...', duration: 12000 },
+        { progress: 90, stage: 'Validating data...', duration: 5000 },
+        { progress: 95, stage: 'Finalizing...', duration: 2000 }
+      ]) : [
         { progress: 10, stage: 'Uploading file...', duration: 2000 },
         { progress: 30, stage: 'Processing image...', duration: 5000 },
         { progress: 60, stage: 'Extracting card data...', duration: 15000 },
@@ -117,6 +131,8 @@ export const UploadProgress = ({ isUploading, mode }: UploadProgressProps) => {
         textAlign: 'center'
       }}>
         {mode === 'image' && 'Image processing typically takes 30-60 seconds'}
+        {mode === 'pdf' && !isMultiplePdf && 'PDF processing typically takes 30-45 seconds'}
+        {mode === 'pdf' && isMultiplePdf && 'Multiple PDF processing typically takes 45-75 seconds'}
         {mode === 'html' && 'Converting HTML to PDF and extracting data'}
         {mode === 'csv' && 'Processing CSV data'}
       </div>

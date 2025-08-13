@@ -133,6 +133,128 @@ export const importService = {
     return res.json()
   },
 
+  async uploadPdf(metadata: { brand: string; set_name: string; year: number; sport: string; release_date?: string | null; source?: string | null }, file: File): Promise<UploadPreviewResponse> {
+    const formData = new FormData()
+    formData.append('files', file) // Changed from 'file' to 'files' to match backend
+
+    const params = new URLSearchParams({
+      brand: metadata.brand,
+      set_name: metadata.set_name,
+      year: String(metadata.year),
+      sport: metadata.sport,
+    })
+    if (metadata.release_date) params.append('release_date', metadata.release_date)
+    if (metadata.source) params.append('source', metadata.source)
+
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/upload-pdf?${params.toString()}`, {
+      method: 'POST',
+      headers: {}, // apiRequest will add auth headers, don't add Content-Type for FormData
+      body: formData,
+    })
+    if (!res.ok) {
+      let msg = 'PDF upload failed'
+      try {
+        const data = await res.json()
+        if (Array.isArray(data.detail)) {
+          msg = data.detail.map((d: any) => d.msg).join('; ')
+        } else if (typeof data.detail === 'string') {
+          msg = data.detail
+        }
+        
+        // Enhanced error handling based on status codes
+        switch (res.status) {
+          case 400:
+            if (msg.includes('file type')) {
+              msg = 'Please select a valid PDF file.'
+            } else if (msg.includes('too large')) {
+              msg = 'PDF file too large. Maximum size is 50MB.'
+            } else {
+              msg = `Invalid PDF: ${msg}`
+            }
+            break
+          case 500:
+            msg = `PDF processing failed: ${msg}`
+            break
+          case 502:
+            msg = `AI processing failed: ${msg}`
+            break
+          case 504:
+            msg = 'Processing timed out. Try a smaller PDF file.'
+            break
+        }
+      } catch { /* ignore */ }
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+
+  async uploadMultiplePdfs(metadata: { brand: string; set_name: string; year: number; sport: string; release_date?: string | null; source?: string | null }, files: File[]): Promise<UploadPreviewResponse> {
+    const formData = new FormData()
+    
+    // Add all PDF files with the same 'files' parameter name
+    files.forEach(file => {
+      formData.append('files', file)
+    })
+
+    const params = new URLSearchParams({
+      brand: metadata.brand,
+      set_name: metadata.set_name,
+      year: String(metadata.year),
+      sport: metadata.sport,
+    })
+    if (metadata.release_date) params.append('release_date', metadata.release_date)
+    if (metadata.source) params.append('source', metadata.source)
+
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/upload-pdf?${params.toString()}`, {
+      method: 'POST',
+      headers: {}, // apiRequest will add auth headers, don't add Content-Type for FormData
+      body: formData,
+    })
+    if (!res.ok) {
+      let msg = 'Multiple PDF upload failed'
+      try {
+        const data = await res.json()
+        if (Array.isArray(data.detail)) {
+          msg = data.detail.map((d: any) => d.msg).join('; ')
+        } else if (typeof data.detail === 'string') {
+          msg = data.detail
+        }
+        
+        // Enhanced error handling based on status codes
+        switch (res.status) {
+          case 400:
+            if (msg.includes('No files provided')) {
+              msg = 'Please select at least one PDF file.'
+            } else if (msg.includes('Invalid file type')) {
+              msg = 'Please select valid PDF files only.'
+            } else if (msg.includes('too large')) {
+              msg = 'Total PDF files too large. Maximum total size is 100MB.'
+            } else {
+              msg = `Invalid PDFs: ${msg}`
+            }
+            break
+          case 500:
+            if (msg.includes('PDF merging failed')) {
+              msg = `PDF merging failed: ${msg}`
+            } else if (msg.includes('PyPDF2 not installed')) {
+              msg = 'Server error: PDF merging not available'
+            } else {
+              msg = `PDF processing failed: ${msg}`
+            }
+            break
+          case 502:
+            msg = `AI processing failed: ${msg}`
+            break
+          case 504:
+            msg = 'Processing timed out. Try fewer or smaller PDF files.'
+            break
+        }
+      } catch { /* ignore */ }
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+
   async uploadJson(payload: ImportBatchPayload): Promise<UploadPreviewResponse> {
     const res = await apiRequest(`${API_BASE_URL}/admin/imports/upload-json`, {
       method: 'POST',

@@ -7,6 +7,7 @@ import { AppNavbar } from '../components/ui/AppNavbar'
 import { ImagePreview } from '../components/ImagePreview'
 import { FileUpload } from '../components/FileUpload'
 import { ImageUploadHelp } from '../components/ImageUploadHelp'
+import { PdfUploadHelp } from '../components/PdfUploadHelp'
 import { UploadProgress } from '../components/UploadProgress'
 
 export const ImportUploadPage = () => {
@@ -14,26 +15,35 @@ export const ImportUploadPage = () => {
   const [metadata, setMetadata] = useState<ImportBatchMetadata>({ brand: '', set_name: '', year: new Date().getFullYear(), sport: '' })
   const [source, setSource] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [mode, setMode] = useState<'csv' | 'html' | 'image' | 'json'>('csv')
+  const [files, setFiles] = useState<File[]>([])
+  const [mode, setMode] = useState<'csv' | 'html' | 'image' | 'pdf' | 'json'>('csv')
   const [jsonText, setJsonText] = useState('')
   const [preview, setPreview] = useState<UploadPreviewResponse | null>(null)
   const [batchPayload, setBatchPayload] = useState<ImportBatchPayload | null>(null)
   const [stageLoading, setStageLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+  const [multiplePdfMode, setMultiplePdfMode] = useState(false)
 
   const isJson = mode === 'json'
 
   const uploadFileMutation = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error('No file selected')
-      
-      if (mode === 'csv') {
-        return importService.uploadCsv({ ...metadata, source: source || undefined }, file)
-      } else if (mode === 'html') {
-        return importService.uploadHtml({ ...metadata, source: source || undefined }, file)
-      } else if (mode === 'image') {
-        return importService.uploadImage({ ...metadata, source: source || undefined }, file)
+      if (mode === 'pdf' && multiplePdfMode) {
+        if (files.length === 0) throw new Error('No files selected')
+        return importService.uploadMultiplePdfs({ ...metadata, source: source || undefined }, files)
+      } else {
+        if (!file) throw new Error('No file selected')
+        
+        if (mode === 'csv') {
+          return importService.uploadCsv({ ...metadata, source: source || undefined }, file)
+        } else if (mode === 'html') {
+          return importService.uploadHtml({ ...metadata, source: source || undefined }, file)
+        } else if (mode === 'image') {
+          return importService.uploadImage({ ...metadata, source: source || undefined }, file)
+        } else if (mode === 'pdf') {
+          return importService.uploadPdf({ ...metadata, source: source || undefined }, file)
+        }
       }
       throw new Error('Invalid file upload mode')
     },
@@ -80,12 +90,22 @@ export const ImportUploadPage = () => {
       return 'Processing CSV with Gemini...'
     } else if (mode === 'image') {
       return 'Processing image with AI vision (30-60 seconds)...'
+    } else if (mode === 'pdf') {
+      if (multiplePdfMode) {
+        return 'Merging PDFs and processing with AI (30-60 seconds)...'
+      } else {
+        return 'Processing PDF with AI (30-45 seconds)...'
+      }
     }
     return 'Uploading...'
   }
 
   const handleFileChange = (newFile: File | null) => {
     setFile(newFile)
+  }
+
+  const handleFilesChange = (newFiles: File[]) => {
+    setFiles(newFiles)
   }
 
   const handleStage = () => {
@@ -109,10 +129,11 @@ export const ImportUploadPage = () => {
       <AppNavbar title="Data Import" subtitle="Upload • Preview • Stage • Resolve • Commit" />
       {/* Main Content */}
       <div className="dashboard-main" style={{ paddingTop: '24px' }}>
-        <div className="grid xl:grid-cols-3 gap-12 items-start">
+        <div className="grid xl:grid-cols-3 gap-16 items-start">
           {/* Left Column (Form + Preview) */}
-          <div className="xl:col-span-2" style={{ display: 'flex', flexDirection: 'column', gap: '48px' }}>
-            <div className="dashboard-card" style={{ cursor: 'default', padding: '36px', marginBottom: '24px' }}>
+          <div className="xl:col-span-2" style={{ display: 'flex', flexDirection: 'column', gap: '64px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="dashboard-card" style={{ cursor: 'default', padding: '36px' }}>
               <div className="flex items-center justify-between mb-8">
                 <h2 className="dashboard-card-title" style={{ marginBottom: 0, fontSize: '18px' }}>Upload Source</h2>
                 <div style={{ 
@@ -211,6 +232,35 @@ export const ImportUploadPage = () => {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setMode('pdf')}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      background: mode === 'pdf' ? 'var(--accent-primary)' : 'transparent',
+                      color: mode === 'pdf' ? 'white' : 'var(--text-secondary)',
+                    }}
+                    onMouseOver={(e) => {
+                      if (mode !== 'pdf') {
+                        e.currentTarget.style.background = 'var(--bg-secondary)'
+                        e.currentTarget.style.color = 'var(--text-primary)'
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (mode !== 'pdf') {
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = 'var(--text-secondary)'
+                      }
+                    }}
+                  >
+                    PDF
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setMode('json')}
                     style={{
                       padding: '8px 16px',
@@ -275,14 +325,96 @@ export const ImportUploadPage = () => {
                     </div>
                   </div>
                   
+                  {mode === 'pdf' && (
+                    <div style={{ 
+                      marginBottom: '20px', 
+                      padding: '16px', 
+                      backgroundColor: 'var(--bg-tertiary)', 
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-primary)'
+                    }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        marginBottom: '8px'
+                      }}>
+                        <label className="form-label" style={{ marginBottom: 0 }}>PDF Upload Mode</label>
+                        <div style={{ 
+                          display: 'flex', 
+                          background: 'var(--bg-secondary)', 
+                          borderRadius: '6px', 
+                          padding: '2px',
+                          border: '1px solid var(--border-primary)'
+                        }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMultiplePdfMode(false)
+                              setFiles([])
+                              setFile(null)
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '4px',
+                              border: 'none',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              background: !multiplePdfMode ? 'var(--accent-primary)' : 'transparent',
+                              color: !multiplePdfMode ? 'white' : 'var(--text-secondary)',
+                            }}
+                          >
+                            Single PDF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMultiplePdfMode(true)
+                              setFile(null)
+                              setFiles([])
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '4px',
+                              border: 'none',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              background: multiplePdfMode ? 'var(--accent-primary)' : 'transparent',
+                              color: multiplePdfMode ? 'white' : 'var(--text-secondary)',
+                            }}
+                          >
+                            Multiple PDFs
+                          </button>
+                        </div>
+                      </div>
+                      <p style={{ 
+                        fontSize: '12px', 
+                        color: 'var(--text-secondary)', 
+                        margin: 0 
+                      }}>
+                        {multiplePdfMode 
+                          ? 'Upload multiple PDF files (up to 100MB total). Files will be merged and processed together.'
+                          : 'Upload a single PDF file (up to 50MB).'
+                        }
+                      </p>
+                    </div>
+                  )}
+                  
                   <FileUpload 
                     mode={mode}
                     file={file}
+                    files={files}
                     onFileChange={handleFileChange}
+                    onFilesChange={handleFilesChange}
                     onError={setError}
+                    allowMultiple={mode === 'pdf' && multiplePdfMode}
                   />
                   
-                  <ImagePreview file={file} mode={mode} />
+                  <ImagePreview file={multiplePdfMode && mode === 'pdf' ? null : file} mode={mode} />
                 </>
               )}
 
@@ -344,7 +476,12 @@ export const ImportUploadPage = () => {
               <UploadProgress 
                 isUploading={uploadFileMutation.isPending || uploadJsonMutation.isPending} 
                 mode={mode} 
+                isMultiplePdf={mode === 'pdf' && multiplePdfMode}
               />
+            </div>
+
+            <ImageUploadHelp visible={mode === 'image'} />
+            <PdfUploadHelp visible={mode === 'pdf'} />
             </div>
 
             {preview && (
@@ -399,16 +536,15 @@ export const ImportUploadPage = () => {
               </div>
             )}
 
-            <ImageUploadHelp visible={mode === 'image'} />
           </div>
 
           {/* Right Column (Workflow + Tips) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '24px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
               <div className="dashboard-card" style={{ cursor: 'default', padding: '24px' }}>
                 <h2 className="dashboard-card-title" style={{ marginBottom: '16px', fontSize: '16px' }}>Workflow</h2>
                 <ol className="text-sm text-[var(--text-secondary)] list-decimal pl-4 space-y-3">
-                  <li>Upload CSV, HTML, Image, or JSON to generate a preview.</li>
+                  <li>Upload CSV, HTML, Image, PDF, or JSON to generate a preview.</li>
                   <li>Validate distinct player & team names, counts & parallels.</li>
                   <li>Stage (JSON mode) to create a batch.</li>
                   <li>Resolve player & team names on next screen.</li>
@@ -419,7 +555,7 @@ export const ImportUploadPage = () => {
               <div className="dashboard-card" style={{ cursor: 'default', padding: '24px' }}>
                 <h2 className="dashboard-card-title" style={{ marginBottom: '16px', fontSize: '16px' }}>Tips</h2>
                 <ul className="text-sm text-[var(--text-secondary)] space-y-3">
-                  <li><strong className="text-[var(--text-tertiary)]">CSV/HTML/Image Mode:</strong> Quick ingestion; HTML converted to PDF, Images processed with AI vision.</li>
+                  <li><strong className="text-[var(--text-tertiary)]">CSV/HTML/Image/PDF Mode:</strong> Quick ingestion; HTML converted to PDF, Images and PDFs processed with AI.</li>
                   <li><strong className="text-[var(--text-tertiary)]">Dedup:</strong> Parallels auto-dedup per card type.</li>
                   <li><strong className="text-[var(--text-tertiary)]">Idempotent:</strong> Upserts by (set, number, type).</li>
                   <li><strong className="text-[var(--text-tertiary)]">Unresolved:</strong> Commit blocked until all names resolved.</li>
