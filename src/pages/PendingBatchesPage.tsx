@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { importService } from '../services/imports'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { useNavigate } from 'react-router-dom'
@@ -6,11 +7,37 @@ import type { PendingBatchSummary } from '../types/imports'
 
 export const PendingBatchesPage = () => {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [batchToDelete, setBatchToDelete] = useState<PendingBatchSummary | null>(null)
+  
   const { data, isLoading, error } = useQuery({
     queryKey: ['import','pending-batches'],
     queryFn: () => importService.getPendingBatches(),
     staleTime: 30_000,
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: (batchId: number) => importService.deleteBatch(batchId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['import','pending-batches'] })
+      setBatchToDelete(null)
+    },
+    onError: (error) => {
+      console.error('Delete failed:', error)
+      alert(`Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  })
+
+  const handleDelete = async (batch: PendingBatchSummary) => {
+    setBatchToDelete(batch)
+  }
+
+  const confirmDelete = () => {
+    if (batchToDelete) {
+      deleteMutation.mutate(batchToDelete.batch_id)
+    }
+  }
+
   const batches: PendingBatchSummary[] = data?.pending_batches || []
   return (
     <div className="dashboard-container">
@@ -34,13 +61,34 @@ export const PendingBatchesPage = () => {
                     <span className="dashboard-card-description" style={{ fontSize:'12px' }}>Unresolved:</span>
                     <span style={{ fontWeight: 600, color: '#fbbf24', fontSize:'14px' }}>{unresolved}</span>
                   </div>
-                  <button
-                    className="dashboard-card-button"
-                    style={{ marginTop: '20px', background: iconGradient }}
-                    onMouseOver={(e)=> e.currentTarget.style.background = 'linear-gradient(135deg,#1d4ed8,#4338ca)'}
-                    onMouseOut={(e)=> e.currentTarget.style.background = iconGradient}
-                    onClick={() => navigate(`/admin/imports/${b.batch_id}/resolve`)}
-                  >Resume</button>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+                    <button
+                      className="dashboard-card-button"
+                      style={{ flex: 1, background: iconGradient }}
+                      onMouseOver={(e)=> e.currentTarget.style.background = 'linear-gradient(135deg,#1d4ed8,#4338ca)'}
+                      onMouseOut={(e)=> e.currentTarget.style.background = iconGradient}
+                      onClick={() => navigate(`/admin/imports/${b.batch_id}/resolve`)}
+                    >
+                      Resume
+                    </button>
+                    <button
+                      className="dashboard-card-button"
+                      style={{ 
+                        flex: '0 0 auto',
+                        padding: '8px 4px',
+                        background: 'linear-gradient(135deg,#dc2626,#b91c1c)',
+                        minWidth: 'auto',
+                        width: '60px',
+                        fontSize: '14px'
+                      }}
+                      onMouseOver={(e)=> e.currentTarget.style.background = 'linear-gradient(135deg,#b91c1c,#991b1b)'}
+                      onMouseOut={(e)=> e.currentTarget.style.background = 'linear-gradient(135deg,#dc2626,#b91c1c)'}
+                      onClick={() => handleDelete(b)}
+                      title="Delete batch"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -50,6 +98,63 @@ export const PendingBatchesPage = () => {
                 <p className="dashboard-card-description" style={{ marginTop:'8px' }}>Upload a new import to begin resolving.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Confirmation Modal */}
+        {batchToDelete && (
+          <div className="modal-overlay" onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setBatchToDelete(null)
+            }
+          }}>
+            <div className="modal-content">
+              <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: 'var(--text-primary)' }}>
+                Delete Import Batch
+              </h2>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  Are you sure you want to delete this import batch? This action cannot be undone.
+                </p>
+                
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  borderRadius: '8px',
+                  fontSize: '13px'
+                }}>
+                  <div><strong>{batchToDelete.brand} {batchToDelete.set_name}</strong></div>
+                  <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                    {batchToDelete.year} • Batch #{batchToDelete.batch_id}
+                  </div>
+                  <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                    {batchToDelete.total_rows} cards • {batchToDelete.unresolved_rows} unresolved
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button 
+                  onClick={() => setBatchToDelete(null)}
+                  className="btn-secondary"
+                  disabled={deleteMutation.isPending}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  className="btn-primary"
+                  disabled={deleteMutation.isPending}
+                  style={{ 
+                    backgroundColor: '#dc2626',
+                    borderColor: '#dc2626'
+                  }}
+                >
+                  {deleteMutation.isPending ? 'Deleting...' : 'Delete Batch'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -9,6 +9,10 @@ import type {
   CardRow,
   PendingBatchesResponse,
   BatchDetailsResponse,
+  CardTypePageResponse,
+  BatchRowsResponse,
+  GroupedPreviewResponse,
+  Candidate,
 } from '../types/imports'
 
 const API_BASE_URL = 'http://localhost:8000'
@@ -136,6 +140,76 @@ export const importService = {
   async getBatchDetails(batchId: number): Promise<BatchDetailsResponse> {
     const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/details`)
     if (!res.ok) throw new Error((await res.json()).detail || 'Fetch batch details failed')
+    return res.json()
+  },
+
+  // New paginated endpoints
+  async getCardTypePage(batchId: number, cardType: string, page: number = 1, perPage: number = 50): Promise<CardTypePageResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      per_page: String(perPage)
+    })
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/card-type/${encodeURIComponent(cardType)}?${params}`)
+    if (!res.ok) throw new Error((await res.json()).detail || 'Fetch card type page failed')
+    return res.json()
+  },
+
+  async getBatchRows(batchId: number, options: { 
+    page?: number; 
+    perPage?: number; 
+    resolutionStatus?: 'resolved' | 'unresolved'; 
+    cardType?: string 
+  } = {}): Promise<BatchRowsResponse> {
+    const params = new URLSearchParams()
+    if (options.page) params.set('page', String(options.page))
+    if (options.perPage) params.set('per_page', String(options.perPage))
+    if (options.resolutionStatus) params.set('resolution_status', options.resolutionStatus)
+    if (options.cardType) params.set('card_type', options.cardType)
+    
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/rows?${params}`)
+    if (!res.ok) throw new Error((await res.json()).detail || 'Fetch batch rows failed')
+    return res.json()
+  },
+
+  // Enhanced preview groups for paginated workflow
+  async getPreviewGroupsEnhanced(batchId: number): Promise<GroupedPreviewResponse> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/preview-groups`)
+    if (!res.ok) throw new Error((await res.json()).detail || 'Fetch enhanced preview groups failed')
+    return res.json()
+  },
+
+  // Dynamic candidate search endpoints
+  async searchPlayerCandidates(query: string, sport: string, limit: number = 10): Promise<Candidate[]> {
+    const params = new URLSearchParams({
+      query: query.trim(),
+      sport,
+      limit: String(limit)
+    })
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/search-player-candidates?${params}`)
+    if (!res.ok) throw new Error((await res.json()).detail || 'Search player candidates failed')
+    return res.json()
+  },
+
+  async searchTeamCandidates(query: string, sport: string, limit: number = 10): Promise<Candidate[]> {
+    const params = new URLSearchParams({
+      query: query.trim(),
+      sport,
+      limit: String(limit)
+    })
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/search-team-candidates?${params}`)
+    if (!res.ok) throw new Error((await res.json()).detail || 'Search team candidates failed')
+    return res.json()
+  },
+
+  // Delete import batch
+  async deleteBatch(batchId: number): Promise<any> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}`, {
+      method: 'DELETE'
+    })
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.detail || 'Delete batch failed')
+    }
     return res.json()
   },
 }

@@ -220,3 +220,63 @@ export interface BatchDetailsResponse {
   }
   ready_to_commit: boolean
 }
+
+// New paginated types
+export interface PaginationInfo {
+  page: number
+  per_page: number
+  total_items: number
+  total_pages: number
+  has_next: boolean
+  has_prev: boolean
+}
+
+export interface CardData {
+  row_id: number
+  row_index: number
+  card_number: string
+  title: string
+  players: ImportPlayerRef[]
+  parallels: ImportParallelRef[]
+  resolution_status: "unresolved" | "resolved"
+}
+
+export interface CardTypeGroup {
+  card_type: string
+  total_cards: number
+  parallels: ImportParallelRef[]
+  cards: CardData[]
+  pagination: PaginationInfo
+}
+
+export interface CardTypePageResponse {
+  group: CardTypeGroup
+}
+
+export interface GroupedPreviewResponse {
+  metadata: ImportBatchMetadata
+  totals: {
+    total_cards: number
+    card_types: number
+    unique_players: number
+    unique_teams: number
+  }
+  card_types: string[]
+  player_names: string[]
+  team_names: string[]
+  player_candidates: Record<string, Candidate[]>
+  team_candidates: Record<string, Candidate[]>
+}
+
+export interface RowData {
+  row_id: number
+  row_index: number
+  data: ImportCard
+  resolution_status: "unresolved" | "resolved"
+}
+
+export interface BatchRowsResponse {
+  batch_id: number
+  pagination: PaginationInfo
+  rows: RowData[]
+}

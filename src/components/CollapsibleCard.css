@@ -158,6 +158,10 @@
   height: 0; /* collapsed state default */
 }
 
+.collapsible-card.open .collapsible-card-collapsible {
+  height: auto; /* expanded state */
+}
+
 .collapsible-card-inner {
   overflow: hidden;
   border-top: 1px solid var(--border-primary);

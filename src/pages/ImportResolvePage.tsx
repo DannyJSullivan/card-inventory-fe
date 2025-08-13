@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { importService } from '../services/imports'
 import { useImportResolutionStore } from '../stores/importResolution'
-import type { Candidate, CardRow, CardEditPayload, ImportPlayerRef, ImportParallelRef } from '../types/imports'
+import type { Candidate, CardRow, CardEditPayload, ImportPlayerRef, ImportParallelRef, GroupedPreviewResponse } from '../types/imports'
 import { AppNavbar } from '../components/ui/AppNavbar'
+import { DynamicTeamResolution } from '../components/DynamicTeamResolution'
 import '../components/CardEditModal.css'
 import '../components/CollapsibleCard.css'
 
@@ -15,100 +16,6 @@ const parseCardNum = (val: string | null | undefined): number => {
   return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER
 }
 
-interface CardResolveProps { row: CardRow; existingEdit?: CardEditPayload; onApprove: (row: CardRow) => void; onEdit: (row: CardRow) => void }
-const CardResolveCard = ({ row, existingEdit, onApprove, onEdit }: CardResolveProps) => {
-  const base = row.data
-  const resolutionStore = useImportResolutionStore()
-  const playerNames = Array.from(new Set((base.players||[]).map(p => p.name).filter(Boolean)))
-  const teamNames = Array.from(new Set((base.players||[]).map(p => p.team_name).filter(Boolean)))
-  const unresolvedPlayers = playerNames.filter(n => !resolutionStore.players[n]?.selection).length
-  const unresolvedTeams = teamNames.filter(n => !resolutionStore.teams[n]?.selection).length
-  const totalUnresolved = unresolvedPlayers + unresolvedTeams
-  const isRookie = base.is_rookie
-  const isFirst = base.is_first
-  const isAutograph = base.is_autograph
-  const gradient = (()=>{ const ct = (base.card_type||'').toLowerCase(); if (ct.includes('auto')) return 'linear-gradient(135deg,#db2777,#7c3aed)'; if (ct.includes('rookie')) return 'linear-gradient(135deg,#2563eb,#4f46e5)'; if (ct.includes('parallel')) return 'linear-gradient(135deg,#059669,#10b981)'; return 'linear-gradient(135deg,#374151,#4b5563)'; })()
-  return (
-    <div className="dashboard-card hover:shadow-xl transition-all duration-300" style={{ padding:'24px', position:'relative' }}>
-      <div className="flex items-start gap-6">
-        <div className="dashboard-card-icon flex-shrink-0" style={{ background: gradient, width: '56px', height: '56px' }}>
-          <span style={{ fontSize:'16px', fontWeight:700, color:'white' }}>{(row.data.card_number || row.row_index || '').toString().slice(0,3)}</span>
-        </div>
-        <div className="flex-1 min-w-0 space-y-4">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <h3 className="dashboard-card-title font-bold text-xl">#{row.data.card_number || row.row_index}</h3>
-              {base.card_type && <span className="text-sm px-4 py-1.5 rounded-full bg-gray-700 text-gray-200 font-medium">{base.card_type}</span>}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {existingEdit && <span className="text-xs px-3 py-1 rounded-full bg-indigo-500 text-white font-medium">✏️ Edited</span>}
-              {totalUnresolved>0 && <span className="text-xs px-3 py-1 rounded-full bg-amber-500 text-white font-medium">⚠️ {totalUnresolved} unresolved</span>}
-              {totalUnresolved===0 && <span className="text-xs px-3 py-1 rounded-full bg-emerald-500 text-white font-medium">✅ Resolved</span>}
-            </div>
-          </div>
-
-          {(base.title || base.subset) && (
-            <div className="dashboard-card-description text-sm leading-relaxed" style={{ marginTop:'12px', marginBottom:'12px' }}>
-              {[base.title, base.subset].filter(Boolean).join(' • ')}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {!!playerNames.length && (
-              <div className="text-sm text-gray-400">
-                <span className="text-gray-500 font-medium">Players:</span> 
-                <span className="ml-2">{playerNames.slice(0,3).join(', ')}{playerNames.length>3 && ` +${playerNames.length-3} more`}</span>
-              </div>
-            )}
-            {!!teamNames.length && (
-              <div className="text-sm text-gray-400">
-                <span className="text-gray-500 font-medium">Teams:</span> 
-                <span className="ml-2">{teamNames.slice(0,3).join(', ')}{teamNames.length>3 && ` +${teamNames.length-3} more`}</span>
-              </div>
-            )}
-          </div>
-
-          {(isRookie || isFirst || isAutograph) && (
-            <div className="flex flex-wrap gap-3">
-              {isRookie && <span className="px-4 py-2 rounded-full bg-blue-500 text-white font-medium text-sm">🌟 Rookie</span>}
-              {isFirst && <span className="px-4 py-2 rounded-full bg-indigo-500 text-white font-medium text-sm">🥇 First</span>}
-              {isAutograph && <span className="px-4 py-2 rounded-full bg-pink-500 text-white font-medium text-sm">✍️ Auto</span>}
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <button 
-              onClick={()=>onApprove(row)} 
-              className="dashboard-card-button flex-1"
-              style={{ background:'linear-gradient(135deg, #059669, #10b981)' }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #047857, #059669)'
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #059669, #10b981)'
-              }}
-            >
-              ✓ Approve
-            </button>
-            <button 
-              onClick={() => onEdit(row)} 
-              className="dashboard-card-button flex-1"
-              style={{ background:'linear-gradient(135deg, #2563eb, #4f46e5)' }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #1d4ed8, #4338ca)'
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb, #4f46e5)'
-              }}
-            >
-              ✏️ Edit
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // Card Edit Modal
 interface CardModalProps { 
@@ -522,119 +429,16 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
                   backgroundColor: 'var(--bg-tertiary)',
                   borderRadius: '8px'
                 }}>
-                  {teamNames.map(raw => {
-                    const st = teams[raw]
-                    const candidates = groups.team_candidates[raw] || []
-                    const unresolved = !st?.selection
-                    return (
-                      <div key={raw} style={{ 
-                        padding: '12px', 
-                        backgroundColor: 'var(--bg-card)', 
-                        border: '1px solid var(--border-primary)', 
-                        borderRadius: '8px' 
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>{raw}</span>
-                          {st?.selection && 'existingId' in st.selection && (
-                            <span style={{ 
-                              fontSize: '10px', 
-                              padding: '4px 8px', 
-                              borderRadius: '12px', 
-                              backgroundColor: '#059669', 
-                              color: 'white', 
-                              fontWeight: '500' 
-                            }}>
-                              ✅ Linked
-                            </span>
-                          )}
-                          {st?.selection && 'create' in st.selection && (
-                            <span style={{ 
-                              fontSize: '10px', 
-                              padding: '4px 8px', 
-                              borderRadius: '12px', 
-                              backgroundColor: '#2563eb', 
-                              color: 'white', 
-                              fontWeight: '500' 
-                            }}>
-                              🆕 New
-                            </span>
-                          )}
-                          {unresolved && (
-                            <span style={{ 
-                              fontSize: '10px', 
-                              padding: '4px 8px', 
-                              borderRadius: '12px', 
-                              backgroundColor: '#d97706', 
-                              color: 'white', 
-                              fontWeight: '500' 
-                            }}>
-                              ⚠️ Pending
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                          {candidates.slice(0,6).map((c: any) => {
-                            const selected = st?.selection && 'existingId' in st.selection && st.selection.existingId === c.id
-                            return (
-                              <button 
-                                key={c.id} 
-                                onClick={() => select('team', raw, { kind:'team', raw, existingId: c.id, canonical: c.name })} 
-                                style={{
-                                  padding: '4px 8px', 
-                                  borderRadius: '6px', 
-                                  fontSize: '11px', 
-                                  border: '1px solid var(--border-secondary)',
-                                  backgroundColor: selected ? '#4f46e5' : 'var(--button-bg)',
-                                  color: selected ? 'white' : 'var(--text-tertiary)',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                {c.name} <span style={{ opacity: 0.7 }}>({c.score})</span>
-                              </button>
-                            )
-                          })}
-                          {candidates.length === 0 && (
-                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                              No candidates
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button 
-                            onClick={() => select('team', raw, { kind:'team', raw, create: raw })} 
-                            style={{
-                              fontSize: '11px', 
-                              padding: '6px 12px', 
-                              borderRadius: '6px', 
-                              backgroundColor: '#2563eb', 
-                              color: 'white',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontWeight: '500'
-                            }}
-                          >
-                            🆕 Create New
-                          </button>
-                          {st?.selection && (
-                            <button 
-                              onClick={() => clear('team', raw)} 
-                              style={{
-                                fontSize: '11px', 
-                                padding: '6px 12px', 
-                                borderRadius: '6px', 
-                                backgroundColor: 'var(--button-bg)', 
-                                color: 'var(--text-tertiary)',
-                                border: '1px solid var(--border-secondary)',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              🗑️ Clear
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
+                  {teamNames.map(raw => (
+                    <DynamicTeamResolution
+                      key={raw}
+                      teamName={raw}
+                      sport={groups.metadata?.sport || 'Baseball'}
+                      teamState={teams[raw]}
+                      onSelect={select}
+                      onClear={clear}
+                    />
+                  ))}
                   {teamNames.length === 0 && (
                     <div style={{ 
                       fontSize: '12px', 
@@ -809,48 +613,73 @@ const ParallelEditModal = ({ cardType, parallels, onSave, onClose }: ParallelMod
 
 export const ImportResolvePage = () => {
   const { batchId } = useParams<{ batchId: string }>()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const idNum = Number(batchId)
   const { initialize, unresolvedCount, buildResolveRequest, markClean, setErrors, unresolvedByKind, autoSelectTop, setCardEdit, removeCardEdit, cardEdits, players, teams } = useImportResolutionStore()
   const [autoThreshold, setAutoThreshold] = useState(98)
   const [search, setSearch] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showUnresolvedOnly, setShowUnresolvedOnly] = useState(false)
-  const [expandAll, setExpandAll] = useState(false)
   const [activeRow, setActiveRow] = useState<CardRow | null>(null)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [cardTypeParallels, setCardTypeParallels] = useState<Record<string, ImportParallelRef[]>>({})
   const [parallelModalCardType, setParallelModalCardType] = useState<string | null>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const [totalItems, setTotalItems] = useState(0)
 
-  const groupsQuery = useQuery({ queryKey: ['import','batch',idNum,'groups'], queryFn: () => importService.getPreviewGroups(idNum), enabled: !!idNum })
+  // Try enhanced preview groups first, fallback to legacy if not available
+  const groupsQuery = useQuery({ 
+    queryKey: ['import','batch',idNum,'groups'], 
+    queryFn: async () => {
+      try {
+        return await importService.getPreviewGroupsEnhanced(idNum)
+      } catch {
+        // Fallback to legacy endpoint
+        return await importService.getPreviewGroups(idNum)
+      }
+    }, 
+    enabled: !!idNum 
+  })
   const rowsQuery = useQuery({ queryKey: ['import','batch',idNum,'rows'], queryFn: () => importService.getCardRows(idNum), enabled: !!idNum })
 
   useEffect(()=>{ if (groupsQuery.data) initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names) }, [groupsQuery.data, idNum, initialize])
 
-  // derive filtered rows
-  const filteredByType = useMemo(()=>{
+  // derive filtered rows grouped by card type
+  const filteredByType = useMemo(() => {
     if (!rowsQuery.data) return {}
     
     const rows = rowsQuery.data.rows.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number))
-    const byType: Record<string, CardRow[]> = {}
-    rows.forEach(r => { const ct = r.data.card_type || 'Other'; (byType[ct] ||= []).push(r) })
-    
     const term = search.trim().toLowerCase()
-    const result: Record<string, CardRow[]> = {}
-    Object.entries(byType).forEach(([ct, list]) => {
-      const f = list.filter(r => {
-        const num = r.data.card_number || ''
-        const title = r.data.title || ''
-        const subset = r.data.subset || ''
-        const unresolvedPlayers = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean))).filter(n=>!players[n]?.selection).length
-        const unresolvedTeams = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean))).filter(n=>!teams[n]?.selection).length
-        const unresolvedTotal = unresolvedPlayers + unresolvedTeams
-        if (showUnresolvedOnly && unresolvedTotal === 0) return false
-        if (!term) return true
-        return [num,title,subset,ct].some(v => v.toLowerCase().includes(term))
-      })
-      if (f.length) result[ct] = f
+    
+    const filtered = rows.filter(r => {
+      const num = r.data.card_number || ''
+      const title = r.data.title || ''
+      const subset = r.data.subset || ''
+      const cardType = r.data.card_type || 'Other'
+      const unresolvedPlayers = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean))).filter(n=>!players[n]?.selection).length
+      const unresolvedTeams = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean))).filter(n=>!teams[n]?.selection).length
+      const unresolvedTotal = unresolvedPlayers + unresolvedTeams
+      if (showUnresolvedOnly && unresolvedTotal === 0) return false
+      if (!term) return true
+      return [num,title,subset,cardType].some(v => v.toLowerCase().includes(term))
     })
-    return result
-  }, [rowsQuery.data, search, showUnresolvedOnly, players, teams])
+    
+    // Group by card type
+    const byType: Record<string, CardRow[]> = {}
+    filtered.forEach(r => {
+      const ct = r.data.card_type || 'Other'
+      if (!byType[ct]) byType[ct] = []
+      byType[ct].push(r)
+    })
+    
+    // Update total items for info display
+    const newTotalItems = filtered.length
+    if (newTotalItems !== totalItems) {
+      setTotalItems(newTotalItems)
+    }
+    
+    return byType
+  }, [rowsQuery.data, search, showUnresolvedOnly, players, teams, totalItems])
   
   // Initialize card type parallels from the groups data
   useEffect(() => {
@@ -894,6 +723,18 @@ export const ImportResolvePage = () => {
     onError: (e: any) => { const msg = e.message||'Commit failed'; if (/unresolved/i.test(msg)) { const names = msg.match(/\[(.*?)\]/)?.[1]?.split(',').map((s: string)=>s.replace(/['"\s]/g,''))||[]; setErrors('player', names); setErrors('team', names) } alert(msg) }
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: () => importService.deleteBatch(idNum),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['import','pending-batches'] })
+      navigate('/admin/imports')
+    },
+    onError: (error) => {
+      console.error('Delete failed:', error)
+      alert(`Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  })
+
   if (groupsQuery.isLoading || rowsQuery.isLoading) return (
     <div className="dashboard-container min-h-screen flex flex-col">
       <AppNavbar title="Resolve Import" subtitle="Loading batch…" />
@@ -919,7 +760,7 @@ export const ImportResolvePage = () => {
   )
 
   const groups: any = groupsQuery.data
-  const rows = rowsQuery.data.rows.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number))
+  const rows = rowsQuery.data?.rows?.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number)) || []
   const playerCandidatesMap: Record<string, Candidate[]> = groups?.player_candidates || {}
   const teamCandidatesMap: Record<string, Candidate[]> = groups?.team_candidates || {}
 
@@ -927,8 +768,6 @@ export const ImportResolvePage = () => {
   const playerUnresolved = unresolvedByKind('player')
   const teamUnresolved = unresolvedByKind('team')
 
-  // auto expand effect
-  useEffect(()=>{ if (expandAll) { /* no direct refs; handled by passing prop if needed */ } }, [expandAll])
 
   const approveCardRow = (row: CardRow, playerCandidates: Record<string, Candidate[]>, teamCandidates: Record<string, Candidate[]>) => {
     const store = useImportResolutionStore.getState()
@@ -964,7 +803,7 @@ export const ImportResolvePage = () => {
   }
   const onApprove = (row: CardRow) => approveCardRow(row, playerCandidatesMap, teamCandidatesMap)
   
-  const approveAllInSection = (_cardType: string, rows: CardRow[]) => {
+  const approveAllInSection = (cardType: string, rows: CardRow[]) => {
     rows.forEach(row => approveCardRow(row, playerCandidatesMap, teamCandidatesMap))
   }
   
@@ -990,87 +829,7 @@ export const ImportResolvePage = () => {
       })
     })
   }
-  const onEditRow = (row: CardRow) => {
-    setActiveRow(row);
-  }
 
-  // Remove old SectionHeader; introduce unified collapsible card component wrapping header + content
-  const CollapsibleCard = ({
-    cardType,
-    count,
-    collapsed,
-    onToggle,
-    onEditParallels,
-    onApproveAll,
-    parallelsCount,
-    editCount,
-    unresolvedCount,
-    children
-  }: {
-    cardType: string
-    count: number
-    collapsed: boolean
-    onToggle: () => void
-    onEditParallels: () => void
-    onApproveAll: () => void
-    parallelsCount: number
-    editCount: number
-    unresolvedCount: number
-    children: React.ReactNode
-  }) => {
-
-    return (
-      <div className={`collapsible-card ${!collapsed ? 'open' : ''}`}>
-        <div className="collapsible-card-header">
-          <div className="collapsible-card-left">
-            <button
-              type="button"
-              onClick={onToggle}
-              aria-expanded={!collapsed}
-              aria-controls={`section-${cardType}`}
-              className="collapsible-card-toggle"
-              title={collapsed ? `Expand ${cardType}` : `Collapse ${cardType}`}
-            >
-              <span className="collapsible-card-toggle-icon">▸</span>
-            </button>
-            <div className="collapsible-card-title-row">
-              <h2 className="collapsible-card-title">{cardType}</h2>
-              <span className="collapsible-card-badge">{count} cards</span>
-              <span className="collapsible-card-badge edits">{editCount} edits</span>
-              <span className={`collapsible-card-badge ${unresolvedCount>0 ? 'unresolved' : 'resolved'}`}>{unresolvedCount>0 ? `${unresolvedCount} unresolved` : 'All resolved'}</span>
-              <span className="collapsible-card-badge parallels">{parallelsCount} parallels</span>
-            </div>
-          </div>
-          <div className="collapsible-card-actions">
-            <button
-              onClick={onEditParallels}
-              className="dashboard-card-button small gradient-indigo"
-            >
-              ⚡ Parallels
-            </button>
-            <button
-              onClick={onApproveAll}
-              className="dashboard-card-button small gradient-emerald"
-            >
-              ✓ Approve All
-            </button>
-          </div>
-        </div>
-        {!collapsed && (
-          <div
-            id={`section-${cardType}`}
-            className="collapsible-card-collapsible"
-            role="region"
-            aria-label={`${cardType} cards`}
-          >
-            <div className="collapsible-card-inner">
-              {children}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
 
   return (
     <div className="dashboard-container">
@@ -1092,6 +851,7 @@ export const ImportResolvePage = () => {
               </div>
               <button onClick={()=>resolveMutation.mutate()} disabled={resolveMutation.isPending} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#2563eb,#4f46e5)', opacity: resolveMutation.isPending ? .6:1 }}>{resolveMutation.isPending ? 'Applying…' : 'Apply Changes'}</button>
               <button onClick={()=>commitMutation.mutate()} disabled={commitMutation.isPending || unresolved>0} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#059669,#10b981)', opacity: (commitMutation.isPending || unresolved>0)? .6:1 }}>{commitMutation.isPending ? 'Committing…' : `Commit (${unresolved})`}</button>
+              <button onClick={()=>setShowDeleteConfirm(true)} disabled={deleteMutation.isPending} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#dc2626,#b91c1c)', opacity: deleteMutation.isPending ? .6:1 }}>🗑️ Delete</button>
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-3 items-center text-[11px]">
@@ -1100,19 +860,21 @@ export const ImportResolvePage = () => {
               {search && <button onClick={()=>setSearch('')} className="text-gray-400 hover:text-gray-200">✕</button>}
             </div>
             <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={showUnresolvedOnly} onChange={e=>setShowUnresolvedOnly(e.target.checked)} className="accent-blue-600" /><span>Unresolved only</span></label>
-            <button onClick={()=>setExpandAll(v=>!v)} className="px-3 py-1 rounded bg-gray-800 hover:bg-gray-700 border border-gray-700">{expandAll ? 'Collapse All' : 'Expand All'}</button>
             <span className="text-gray-500">Players unresolved: {playerUnresolved}</span>
             <span className="text-gray-500">Teams unresolved: {teamUnresolved}</span>
             <span className="text-gray-500">Card edits: {Object.keys(cardEdits).length}</span>
+            {totalItems > 0 && (
+              <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
+                {totalItems.toLocaleString()} total cards
+              </span>
+            )}
           </div>
         </div>
-        {/* Card Groups */}
+        {/* Card Type Sections */}
         <div className="space-y-10">
           {Object.entries(filteredByType).map(([cardType, list]) => {
             const isCollapsed = collapsedSections[cardType]
-            // compute per-section edit count
             const editCount = list.reduce((acc, r) => acc + (cardEdits[r.row_id] ? 1 : 0), 0)
-            // compute unresolved entities across rows in this section
             const unresolvedCount = list.reduce((acc, r) => {
               const playerNames = Array.from(new Set((r.data.players||[]).map(p=>p.name).filter(Boolean)))
               const teamNames = Array.from(new Set((r.data.players||[]).map(p=>p.team_name).filter(Boolean)))
@@ -1120,35 +882,201 @@ export const ImportResolvePage = () => {
               const unresolvedTeams = teamNames.filter(n => !teams[n]?.selection).length
               return acc + unresolvedPlayers + unresolvedTeams
             }, 0)
+            
             return (
-              <CollapsibleCard
-                key={cardType}
-                cardType={cardType}
-                count={list.length}
-                collapsed={!!isCollapsed}
-                parallelsCount={(cardTypeParallels[cardType] || []).length}
-                editCount={editCount}
-                unresolvedCount={unresolvedCount}
-                onToggle={() => toggleSection(cardType)}
-                onEditParallels={() => setParallelModalCardType(cardType)}
-                onApproveAll={() => approveAllInSection(cardType, list)}
-              >
-                <div className="dashboard-grid">
-                  {list.map(r => (
-                    <CardResolveCard
-                      key={r.row_id}
-                      row={r}
-                      existingEdit={cardEdits[r.row_id]}
-                      onApprove={onApprove}
-                      onEdit={onEditRow}
-                    />
-                  ))}
+              <div key={cardType} className={`collapsible-card ${!isCollapsed ? 'open' : ''}`}>
+                <div className="collapsible-card-header">
+                  <div className="collapsible-card-left">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(cardType)}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={`section-${cardType}`}
+                      className="collapsible-card-toggle"
+                      title={isCollapsed ? `Expand ${cardType}` : `Collapse ${cardType}`}
+                    >
+                      <span className="collapsible-card-toggle-icon">▸</span>
+                    </button>
+                    <div className="collapsible-card-title-row">
+                      <h2 className="collapsible-card-title">{cardType}</h2>
+                      <span className="collapsible-card-badge">{list.length} cards</span>
+                      <span className="collapsible-card-badge edits">{editCount} edits</span>
+                      <span className={`collapsible-card-badge ${unresolvedCount>0 ? 'unresolved' : 'resolved'}`}>
+                        {unresolvedCount>0 ? `${unresolvedCount} unresolved` : 'All resolved'}
+                      </span>
+                      <span className="collapsible-card-badge parallels">
+                        {(cardTypeParallels[cardType] || []).length} parallels
+                      </span>
+                    </div>
+                  </div>
+                  <div className="collapsible-card-actions">
+                    <button
+                      onClick={() => setParallelModalCardType(cardType)}
+                      className="dashboard-card-button small gradient-indigo"
+                    >
+                      ⚡ Parallels
+                    </button>
+                    <button
+                      onClick={() => approveAllInSection(cardType, list)}
+                      className="dashboard-card-button small gradient-emerald"
+                    >
+                      ✓ Approve All
+                    </button>
+                  </div>
                 </div>
-              </CollapsibleCard>
+                {!isCollapsed && (
+                  <div
+                    id={`section-${cardType}`}
+                    className="collapsible-card-collapsible"
+                    role="region"
+                    aria-label={`${cardType} cards`}
+                  >
+                    <div className="collapsible-card-inner">
+                      <div className="admin-table-container">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Card #</th>
+                              <th>Player(s)</th>
+                              <th>Team(s)</th>
+                              <th>Attributes</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {list.map(row => {
+                              const base = row.data
+                              const playerNames = Array.from(new Set((base.players||[]).map(p => p.name).filter(Boolean)))
+                              const teamNames = Array.from(new Set((base.players||[]).map(p => p.team_name).filter(Boolean)))
+                              const unresolvedPlayers = playerNames.filter(n => !players[n]?.selection).length
+                              const unresolvedTeams = teamNames.filter(n => !teams[n]?.selection).length
+                              const totalUnresolved = unresolvedPlayers + unresolvedTeams
+                              const existingEdit = cardEdits[row.row_id]
+                              
+                              return (
+                                <tr key={row.row_id}>
+                                  <td>
+                                    <div style={{ fontWeight: '500' }}>{base.card_number || row.row_index}</div>
+                                    {(base.title || base.subset) && (
+                                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                        {[base.title, base.subset].filter(Boolean).join(' • ')}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>
+                                    {playerNames.length > 0 ? (
+                                      <div style={{ fontSize: '12px' }}>
+                                        {playerNames.slice(0,2).join(', ')}{playerNames.length > 2 && ` +${playerNames.length-2} more`}
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '12px' }}>None</span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    {teamNames.length > 0 ? (
+                                      <div style={{ fontSize: '12px' }}>
+                                        {teamNames.slice(0,2).join(', ')}{teamNames.length > 2 && ` +${teamNames.length-2} more`}
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '12px' }}>None</span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                      {base.is_rookie && (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          padding: '2px 6px', 
+                                          borderRadius: '10px', 
+                                          backgroundColor: '#2563eb', 
+                                          color: 'white' 
+                                        }}>Rookie</span>
+                                      )}
+                                      {base.is_first && (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          padding: '2px 6px', 
+                                          borderRadius: '10px', 
+                                          backgroundColor: '#4f46e5', 
+                                          color: 'white' 
+                                        }}>First</span>
+                                      )}
+                                      {base.is_autograph && (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          padding: '2px 6px', 
+                                          borderRadius: '10px', 
+                                          backgroundColor: '#db2777', 
+                                          color: 'white' 
+                                        }}>Auto</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                      {existingEdit && (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          padding: '2px 6px', 
+                                          borderRadius: '10px', 
+                                          backgroundColor: '#4f46e5', 
+                                          color: 'white' 
+                                        }}>Edited</span>
+                                      )}
+                                      {totalUnresolved > 0 ? (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          padding: '2px 6px', 
+                                          borderRadius: '10px', 
+                                          backgroundColor: '#d97706', 
+                                          color: 'white' 
+                                        }}>{totalUnresolved} unresolved</span>
+                                      ) : (
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          padding: '2px 6px', 
+                                          borderRadius: '10px', 
+                                          backgroundColor: '#059669', 
+                                          color: 'white' 
+                                        }}>Resolved</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="admin-table-actions">
+                                      <button
+                                        onClick={() => onApprove(row)}
+                                        className="btn-small btn-edit"
+                                        title="Auto-approve with high-confidence matches"
+                                      >
+                                        ✓ Approve
+                                      </button>
+                                      <button
+                                        onClick={() => setActiveRow(row)}
+                                        className="btn-small btn-edit"
+                                        title="Edit card details and resolve entities"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )
           })}
-          {Object.keys(filteredByType).length===0 && (
-            <div className="text-sm text-gray-400 text-center py-20 border border-dashed border-gray-700 rounded-lg">No cards match your filters.</div>
+          {Object.keys(filteredByType).length === 0 && (
+            <div className="text-sm text-gray-400 text-center py-20 border border-dashed border-gray-700 rounded-lg">
+              No cards match your filters.
+            </div>
           )}
         </div>
         {activeRow && (
@@ -1168,6 +1096,63 @@ export const ImportResolvePage = () => {
             onSave={(parallels) => updateCardTypeParallels(parallelModalCardType, parallels)}
             onClose={() => setParallelModalCardType(null)}
           />
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="modal-overlay" onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteConfirm(false)
+            }
+          }}>
+            <div className="modal-content">
+              <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: 'var(--text-primary)' }}>
+                Delete Import Batch
+              </h2>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  Are you sure you want to delete this import batch? This action cannot be undone.
+                </p>
+                
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  borderRadius: '8px',
+                  fontSize: '13px'
+                }}>
+                  <div><strong>{groups?.metadata?.brand} {groups?.metadata?.set_name}</strong></div>
+                  <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                    {groups?.metadata?.year} • Batch #{idNum}
+                  </div>
+                  <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                    {rows?.length || 0} cards • {unresolved} unresolved
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button 
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="btn-secondary"
+                  disabled={deleteMutation.isPending}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => deleteMutation.mutate()}
+                  className="btn-primary"
+                  disabled={deleteMutation.isPending}
+                  style={{ 
+                    backgroundColor: '#dc2626',
+                    borderColor: '#dc2626'
+                  }}
+                >
+                  {deleteMutation.isPending ? 'Deleting...' : 'Delete Batch'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
