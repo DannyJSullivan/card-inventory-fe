@@ -18,9 +18,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const data = await authService.refresh()
       authService.saveToken(data.access_token)
-      set({ token: data.access_token, isAuthenticated: true })
+      set({ token: data.access_token, isAuthenticated: true, error: null })
       // optionally refresh user silently
-      try { const user = await authService.getCurrentUser(); set({ user, isAuthenticated: true }) } catch {}
+      try { 
+        const user = await authService.getCurrentUser()
+        set({ user, isAuthenticated: true, error: null }) 
+      } catch (userError) {
+        console.warn('Failed to refresh user data after token refresh:', userError)
+      }
     } catch (e) {
       console.warn('Token refresh failed, logging out')
       get().logout()
@@ -126,7 +131,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
 
     if (authService.isTokenExpired(token)) {
-      authService.removeToken()
+      authService.handleAuthError()
       set({
         user: null,
         token: null,
@@ -134,6 +139,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         error: 'Session expired. Please login again.',
       })
       return
+    }
+
+    // Check if token is expiring soon and refresh if needed
+    if (authService.isTokenExpiringSoon(token, 60)) {
+      try {
+        await get().refreshToken()
+        return // refreshToken already updates the state
+      } catch (error) {
+        console.warn('Token refresh failed during checkAuth')
+        authService.handleAuthError()
+        return
+      }
     }
 
     set({ isLoading: true })
@@ -147,7 +164,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         error: null,
       })
     } catch (error) {
-      authService.removeToken()
+      console.warn('getCurrentUser failed, likely 401:', error)
+      authService.handleAuthError()
       set({
         user: null,
         token: null,
@@ -170,17 +188,14 @@ if (typeof window !== 'undefined') {
     const state = useAuthStore.getState()
     const token = state.token
     if (!token) return
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      const expMs = payload.exp * 1000
-      const remaining = expMs - Date.now()
-      const twoHours = 2 * 60 * 60 * 1000
-      if (remaining < twoHours) {
-        state.refreshToken()
-      }
-    } catch {/* ignore */}
+    
+    // Use the new isTokenExpiringSoon method with 2 hour threshold
+    if (authService.isTokenExpiringSoon(token, 120)) {
+      console.log('Token expiring soon, refreshing...')
+      state.refreshToken()
+    }
   }
-  setInterval(refreshLoop, 60 * 60 * 1000)
+  setInterval(refreshLoop, 60 * 60 * 1000) // Check every hour
 }
 
 if (typeof window !== 'undefined') {

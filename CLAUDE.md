@@ -9,18 +9,31 @@ This is a React TypeScript frontend for a sports card inventory management appli
 ## Implementation Status
 
 ### ✅ Currently Implemented
-- Complete JWT-based authentication system (login, register, logout)
+- Complete JWT-based authentication system with enhanced token management
 - Modern theme system with light/dark mode support
-- Responsive dashboard layout
+- Responsive dashboard layout with organized admin sections
 - Settings dropdown with theme toggle (accessible only after login)
 - CSS-based styling architecture with custom properties
+- **Admin Management System**:
+  - Card management with search, edit, create, delete, bulk operations
+  - Set management with brand association and sorting
+  - Brand management with search functionality
+  - Player management with sport filtering and delete capabilities
+  - Team management with consistent modal patterns
+  - Parallel management with rarity auto-fill and print run validation
+- **Data Import System**:
+  - CSV file upload with Gemini processing
+  - HTML file upload with PDF conversion via Gemini
+  - JSON batch upload for manual data entry
+  - Multi-stage workflow: Upload → Preview → Stage → Resolve → Commit
+  - Player/team name resolution with candidate matching
+- **Modal System Architecture**: Consistent overlay patterns with scroll lock prevention
 
 ### 🚧 Planned (Not Yet Implemented)
-- Card collection management
-- Card CRUD operations
-- Search and filtering functionality
-- Collection analytics
-- Import/export features
+- Card collection management (user-facing)
+- Collection analytics dashboard
+- Advanced search and filtering for end users
+- Public card browsing and discovery
 
 ## Development Commands
 
@@ -49,9 +62,13 @@ npm run lint         # Run ESLint
 
 ### Authentication Flow
 1. **Registration/Login**: React Hook Form validation → Zustand store actions → AuthService API calls
-2. **Token Management**: JWT stored in localStorage with automatic expiry checking
-3. **Route Protection**: ProtectedRoute component guards authenticated pages
-4. **Session Management**: useTokenRefresh hook handles token expiry and auto-logout
+2. **Enhanced Token Management**: 
+   - JWT stored in localStorage with 8-hour expiry (backend configured)
+   - Automatic expiry checking before API calls
+   - Proactive token refresh when expiring within 60 minutes
+   - Global 401 response handling with automatic logout/redirect
+3. **Route Protection**: ProtectedRoute and AdminRoute components guard authenticated pages
+4. **Session Management**: Background token refresh every hour, automatic cleanup on auth errors
 
 ### Theme System Architecture
 - **CSS Custom Properties**: All colors and styling defined as CSS variables in index.css
@@ -95,6 +112,16 @@ const useAuthStore = create<AuthStore>((set, get) => ({
   - `POST /auth/register` - JSON payload
   - `GET /auth/me` - Get current user with Bearer token
   - `POST /auth/logout` - Logout endpoint
+  - `POST /auth/refresh` - Token refresh endpoint
+- **Admin Management Endpoints**: Full CRUD for cards, sets, brands, players, teams, parallels
+- **Import System Endpoints**:
+  - `POST /admin/imports/upload-csv` - CSV file upload with Gemini processing
+  - `POST /admin/imports/upload-html` - HTML file upload with PDF conversion + Gemini
+  - `POST /admin/imports/upload-json` - Direct JSON payload upload
+  - `POST /admin/imports/stage` - Stage batch for resolution
+  - `GET /admin/imports/{id}/preview-groups` - Get resolution candidates
+  - `POST /admin/imports/{id}/resolve` - Submit name resolutions
+  - `POST /admin/imports/{id}/commit` - Finalize import batch
 
 ### File Organization
 ```
@@ -103,12 +130,12 @@ src/
 │   ├── ui/           # Reusable UI components (Alert, SettingsDropdown, etc.)
 │   └── auth/         # Auth-specific components (LoginForm, RegisterForm, ProtectedRoute)
 ├── pages/            # Route-level page components
-├── hooks/            # Custom React hooks (useTokenRefresh)
-├── services/         # API integration layer (AuthService)
+├── hooks/            # Custom React hooks (useModalScrollLock, useDebounce)
+├── services/         # API integration layer (AuthService, AdminService, ImportService)
 ├── stores/           # Zustand state management
 ├── contexts/         # React contexts (ThemeContext)
-├── types/            # TypeScript type definitions
-└── utils/            # Shared utilities (currently empty)
+├── types/            # TypeScript type definitions (auth, imports)
+└── utils/            # Shared utilities (API wrapper with 401 handling)
 ```
 
 ## Development Patterns
@@ -174,14 +201,18 @@ User → Collection → CardRecord → Card/Parallel
 - Never mix inline styles with theme system - use CSS classes
 
 ### Authentication Flow
-- Token stored in localStorage with automatic expiry checking
-- `checkAuth()` called on app initialization to restore session
+- Enhanced token management with 8-hour expiry and proactive refresh
+- `checkAuth()` called on app initialization with automatic token refresh
+- Global 401 handling via `apiRequest()` wrapper in utils/api.ts
 - Protected routes redirect to login if not authenticated
+- Background token refresh checks every hour for tokens expiring within 2 hours
 
 ### CSS/Styling
 - Use semantic CSS classes defined in index.css
 - Avoid inline styles - all styling should use CSS custom properties
 - Components focus on logic, CSS handles all presentation
+- **Modal System**: Use `useModalScrollLock` hook to prevent background scrolling
+- **Admin Pages**: Consistent modal overlay patterns with click-outside-to-close
 
 ## Mobile-First Design Principles
 - Touch-friendly hit targets (minimum 44px)
@@ -193,10 +224,10 @@ User → Collection → CardRecord → Card/Parallel
 
 ### Planned Features
 - React Query integration for server state management
-- Card collection CRUD operations
-- Advanced search and filtering
+- User-facing card collection management
+- Advanced search and filtering for end users
 - Collection analytics dashboard
-- Import/export functionality
+- Public card browsing and discovery
 - Virtual scrolling for large card lists
 
 ### Performance Considerations
@@ -204,3 +235,41 @@ User → Collection → CardRecord → Card/Parallel
 - Lazy load images and large datasets
 - Consider service worker for offline support
 - Virtual scrolling for large card collections
+
+## Recent Implementation Notes
+
+### Admin Management System Patterns
+- **Consistent Modal UX**: All admin pages use modal overlays with `useModalScrollLock`
+- **Search with Debouncing**: 500ms debounce on search inputs across all admin pages
+- **Error Handling**: Retry buttons on failed requests with clear error messaging
+- **Pagination**: Consistent 20-item page size with first/prev/next/last navigation
+- **No ID Columns**: User-facing tables hide database IDs for cleaner presentation
+
+### Import System Architecture
+- **Multi-Format Support**: CSV, HTML (converts to PDF), and JSON upload options
+- **Gemini Processing**: All file types processed through Gemini for data extraction
+- **Stage-Resolve-Commit Workflow**: Three-phase import with name resolution step
+- **Player/Team Resolution**: Candidate matching with create-if-missing options
+- **Batch Management**: Track import progress and allow incremental resolution
+- **Release Date Support**: Upload forms include optional release_date field for sets
+- **Backend Optimizations (2024)**: Improved parallel processing efficiency with backward compatibility
+
+### Authentication Enhancements (2024)
+- **8-Hour Token Expiry**: Backend configured for longer sessions
+- **Proactive Refresh**: Tokens refresh 60 minutes before expiry
+- **Global 401 Handling**: `apiRequest()` wrapper handles auth errors consistently
+- **Enhanced Security**: Automatic logout and redirect on authentication failures
+
+### Development Recommendations
+- **Backend Count Queries**: Admin endpoints need LEFT JOIN queries for accurate counts
+- **Parallel Management**: Auto-fill rarity based on print run (1=Ultra Rare, ≤50=Super Rare, etc.)
+- **Form Validation**: Use React Hook Form with TypeScript interfaces
+- **API Error Handling**: Wrap all API calls with the `apiRequest()` utility
+- **Import System**: All current frontend code continues to work with backend optimizations
+- **Future Optimization**: Consider switching to `parallel_names` array instead of full `parallels` objects in card edits for better performance (optional)
+
+### Backend Compatibility Notes (2024)
+- **No Breaking Changes**: All existing frontend code continues to work unchanged
+- **Enhanced CardEdit Schema**: Supports both `parallels` (current) and `parallel_names` (optimized) formats
+- **Improved Efficiency**: Backend now processes parallels more efficiently while maintaining API compatibility
+- **Release Date Support**: Backend now accepts `release_date` parameter in upload endpoints

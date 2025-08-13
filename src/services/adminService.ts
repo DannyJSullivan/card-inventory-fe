@@ -1,3 +1,5 @@
+import { apiRequest } from '../utils/api'
+
 const API_BASE = 'http://localhost:8000';
 
 interface ApiResponse<T> {
@@ -18,29 +20,14 @@ class AdminService {
     endpoint: string, 
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
-    const token = localStorage.getItem('auth_token');
-    
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    };
-
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, config);
+      const response = await apiRequest(`${API_BASE}${endpoint}`, options);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         return {
           error: errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
-          details: errorData
+          details: { ...errorData, status: response.status }
         };
       }
 
@@ -335,6 +322,13 @@ class AdminService {
   async deleteParallel(parallelId: number) {
     return this.request(`/admin/parallels/${parallelId}`, {
       method: 'DELETE'
+    });
+  }
+
+  async bulkCreateParallels(parallels: any[]) {
+    return this.request('/admin/parallels/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ parallels })
     });
   }
 

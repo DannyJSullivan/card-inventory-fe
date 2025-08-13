@@ -854,13 +854,30 @@ export const ImportResolvePage = () => {
   
   // Initialize card type parallels from the groups data
   useEffect(() => {
-    if (groupsQuery.data?.parallels_by_card_type) {
+    const g: any = groupsQuery.data
+    if (!g) return
+    if (Array.isArray(g.card_types) && g.card_types.length > 0) {
       const initialParallels: Record<string, ImportParallelRef[]> = {}
-      Object.entries(groupsQuery.data.parallels_by_card_type).forEach(([cardType, parallelInfos]) => {
-        initialParallels[cardType] = parallelInfos.map(info => ({
+      g.card_types.forEach((ct: any) => {
+        if (!ct?.name || !Array.isArray(ct?.parallels)) return
+        initialParallels[ct.name] = ct.parallels.map((p: any) => ({
+          name: p.name,
+          print_run: p.print_run ?? null,
+          original_print_run_text: p.original_print_run_text ?? null,
+          odds: p.odds ?? null,
+        }))
+      })
+      setCardTypeParallels(initialParallels)
+      return
+    }
+    if (g?.parallels_by_card_type) {
+      const initialParallels: Record<string, ImportParallelRef[]> = {}
+      Object.entries(g.parallels_by_card_type as Record<string, any[]>).forEach(([cardType, parallelInfos]) => {
+        initialParallels[cardType] = (parallelInfos || []).map((info: any) => ({
           name: info.name,
-          print_run: info.print_run,
-          original_print_run_text: info.original_print_run_text
+          print_run: info.print_run ?? null,
+          original_print_run_text: info.original_print_run_text ?? null,
+          odds: info.odds ?? null,
         }))
       })
       setCardTypeParallels(initialParallels)
@@ -901,8 +918,10 @@ export const ImportResolvePage = () => {
     </div>
   )
 
-  const groups = groupsQuery.data
+  const groups: any = groupsQuery.data
   const rows = rowsQuery.data.rows.slice().sort((a,b) => parseCardNum(a.data.card_number) - parseCardNum(b.data.card_number))
+  const playerCandidatesMap: Record<string, Candidate[]> = groups?.player_candidates || {}
+  const teamCandidatesMap: Record<string, Candidate[]> = groups?.team_candidates || {}
 
   const unresolved = unresolvedCount()
   const playerUnresolved = unresolvedByKind('player')
@@ -943,10 +962,10 @@ export const ImportResolvePage = () => {
       }
     })
   }
-  const onApprove = (row: CardRow) => approveCardRow(row, groups.player_candidates, groups.team_candidates)
+  const onApprove = (row: CardRow) => approveCardRow(row, playerCandidatesMap, teamCandidatesMap)
   
   const approveAllInSection = (_cardType: string, rows: CardRow[]) => {
-    rows.forEach(row => approveCardRow(row, groups.player_candidates, groups.team_candidates))
+    rows.forEach(row => approveCardRow(row, playerCandidatesMap, teamCandidatesMap))
   }
   
   const toggleSection = (cardType: string) => {
@@ -1062,14 +1081,14 @@ export const ImportResolvePage = () => {
           {/* ...existing header area (brand, buttons)... */}
           <div className="flex flex-wrap items-center gap-4 justify-between">
             <div>
-              <h1 className="dashboard-card-title" style={{ fontSize:'20px' }}>{groups.metadata.brand} {groups.metadata.set_name} {groups.metadata.year}</h1>
+              <h1 className="dashboard-card-title" style={{ fontSize:'20px' }}>{groups?.metadata?.brand || ''} {groups?.metadata?.set_name || ''} {groups?.metadata?.year || ''}</h1>
               <p className="dashboard-card-description" style={{ marginTop:'4px' }}>Resolve players, teams & metadata directly per card.</p>
             </div>
             <div className="flex gap-3 flex-wrap items-center">
               <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-[11px]">
                 <span>Auto ≥</span>
                 <input type="number" min={50} max={100} value={autoThreshold} onChange={e=>setAutoThreshold(Number(e.target.value))} className="w-16 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[11px]" />
-                <button onClick={()=>{ const p = autoSelectTop('player', groups.player_candidates, autoThreshold); const t = autoSelectTop('team', groups.team_candidates, autoThreshold); if(!p && !t) alert('No matches met threshold')}} className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[11px]">Run</button>
+                <button onClick={()=>{ const p = autoSelectTop('player', playerCandidatesMap, autoThreshold); const t = autoSelectTop('team', teamCandidatesMap, autoThreshold); if(!p && !t) alert('No matches met threshold')}} className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[11px]">Run</button>
               </div>
               <button onClick={()=>resolveMutation.mutate()} disabled={resolveMutation.isPending} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#2563eb,#4f46e5)', opacity: resolveMutation.isPending ? .6:1 }}>{resolveMutation.isPending ? 'Applying…' : 'Apply Changes'}</button>
               <button onClick={()=>commitMutation.mutate()} disabled={commitMutation.isPending || unresolved>0} className="dashboard-card-button" style={{ background:'linear-gradient(135deg,#059669,#10b981)', opacity: (commitMutation.isPending || unresolved>0)? .6:1 }}>{commitMutation.isPending ? 'Committing…' : `Commit (${unresolved})`}</button>

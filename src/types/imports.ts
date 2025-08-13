@@ -5,6 +5,7 @@ export interface ImportBatchMetadata {
   set_name: string
   year: number
   sport: string
+  release_date?: string | null // ISO date string (YYYY-MM-DD)
   source?: string | null
 }
 
@@ -17,9 +18,12 @@ export interface ImportParallelRef {
   name: string
   print_run?: number | null
   original_print_run_text?: string | null
+  // New: pack odds like "1:24" when known
+  odds?: string | null
 }
 
-export interface ImportItem {
+// Renamed: ImportItem -> ImportCard
+export interface ImportCard {
   row_index?: number | null
   card_number: string // preserve leading zeros
   card_type: string
@@ -30,19 +34,25 @@ export interface ImportItem {
   is_first: boolean
   is_autograph: boolean
   players: ImportPlayerRef[]
-  parallels: ImportParallelRef[]
+  // Preferred going forward: reference parallels by name from card_types[].parallels
+  parallel_names: string[]
+  // Back-compat: keep legacy per-card parallels if present
+  parallels?: ImportParallelRef[]
 }
 
 export interface ImportBatchPayload {
   metadata: ImportBatchMetadata
-  items: ImportItem[]
+  // New authoritative list of parallels per card type
+  card_types?: CardTypeParallels[]
+  // Renamed: items -> cards
+  cards: ImportCard[]
 }
 
 // Card row (staged row) returned for editing
 export interface CardRow {
   row_id: number
   row_index: number
-  data: ImportItem
+  data: ImportCard
   resolution_status: string
 }
 
@@ -58,6 +68,8 @@ export interface CardEditPayload {
   is_first?: boolean
   is_autograph?: boolean
   players?: ImportPlayerRef[]
+  // Prefer setting names; keep legacy parallels for back-compat
+  parallel_names?: string[]
   parallels?: ImportParallelRef[]
 }
 
@@ -65,6 +77,7 @@ export interface ParallelInfo {
   name: string
   print_run?: number | null
   original_print_run_text?: string | null
+  odds?: string | null
 }
 
 export interface Candidate {
@@ -73,15 +86,31 @@ export interface Candidate {
   score: number // 0-100
 }
 
+export interface CardTypeParallels {
+  name: string
+  parallels: ImportParallelRef[]
+}
+
+export interface PreviewTotals {
+  items: number
+  // Allow additional counters like distinct_* without strict typing
+  [key: string]: number
+}
+
 export interface PreviewData {
-  totals: {
-    items: number
-    players: number
-    teams: number
-  }
+  // Minimal required: items (counts cards). Extras allowed via index signature.
+  totals: PreviewTotals
+  // Optional echo of metadata
+  metadata?: ImportBatchMetadata
   player_names: string[]
   team_names: string[]
-  parallels_by_card_type: Record<string, ParallelInfo[]>
+  // New structure
+  card_types?: CardTypeParallels[]
+  // Back-compat: some older previews may send a map
+  parallels_by_card_type?: Record<string, ParallelInfo[]>
+  // Optional candidate helpers (present in some previews)
+  player_candidates?: Record<string, Candidate[]>
+  team_candidates?: Record<string, Candidate[]>
 }
 
 export interface UploadPreviewResponse {

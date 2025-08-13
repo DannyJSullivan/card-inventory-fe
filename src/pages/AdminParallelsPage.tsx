@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { adminService } from '../services/adminService'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { BulkCreateParallels } from '../components/BulkCreateParallels'
 
 // Custom hook for debouncing values
 function useDebounce<T>(value: T, delay: number): T {
@@ -49,11 +50,13 @@ export const AdminParallelsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [editingParallel, setEditingParallel] = useState<Parallel | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showBulkCreate, setShowBulkCreate] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [totalItems, setTotalItems] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRarity, setSelectedRarity] = useState<string>('')
+  const [modalError, setModalError] = useState<string | null>(null)
   
   // Debounce the search term to reduce API calls
   const debouncedSearchTerm = useDebounce(searchTerm, 500)
@@ -66,6 +69,7 @@ export const AdminParallelsPage = () => {
     reset,
     watch,
     setValue,
+    setFocus,
     formState: { errors, isSubmitting }
   } = useForm<ParallelFormData>()
 
@@ -83,6 +87,12 @@ export const AdminParallelsPage = () => {
       setCurrentPage(0)
     }
   }, [debouncedSearchTerm, selectedRarity])
+
+  useEffect(() => {
+    if (showCreateForm) {
+      setTimeout(() => setFocus('name'), 0)
+    }
+  }, [showCreateForm, setFocus])
 
   // Prevent body scroll when modal is open
   useModalScrollLock(showCreateForm || !!editingParallel)
@@ -182,12 +192,14 @@ export const AdminParallelsPage = () => {
 
   const onSubmit = async (data: ParallelFormData) => {
     setError(null)
+    setModalError(null)
     
     const parallelData = {
       ...data,
+      name: data.name.trim(),
+      description: data.description?.trim() || null,
+      original_print_run_text: data.original_print_run_text?.trim() || null,
       print_run: data.print_run || null,
-      original_print_run_text: data.original_print_run_text || null,
-      description: data.description || null
     }
     
     try {
@@ -199,7 +211,11 @@ export const AdminParallelsPage = () => {
       }
       
       if (result.error) {
-        setError(`Failed to ${editingParallel ? 'update' : 'create'} parallel: ${result.error}`)
+        if (result.details && result.details.status === 409) {
+          setModalError(result.error)
+        } else {
+          setModalError(`Failed to ${editingParallel ? 'update' : 'create'} parallel: ${result.error}`)
+        }
       } else {
         setEditingParallel(null)
         setShowCreateForm(false)
@@ -247,9 +263,33 @@ export const AdminParallelsPage = () => {
               </span>
             )}
           </div>
-          <button onClick={() => setShowCreateForm(true)} className="btn-primary" style={{ width: 'auto', margin: 0, padding: '8px 16px' }}>
-            Add New Parallel
-          </button>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              onClick={() => setShowBulkCreate(true)} 
+              className="btn-secondary" 
+              style={{ 
+                padding: '8px 16px', 
+                whiteSpace: 'nowrap', 
+                width: 'auto', 
+                margin: 0, 
+                borderRadius: '6px' 
+              }}
+            >
+              Bulk Add
+            </button>
+            <button 
+              onClick={() => setShowCreateForm(true)} 
+              className="btn-primary" 
+              style={{ 
+                padding: '8px 16px', 
+                whiteSpace: 'nowrap', 
+                width: 'auto', 
+                margin: 0 
+              }}
+            >
+              Add New Parallel
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -323,6 +363,7 @@ export const AdminParallelsPage = () => {
             setEditingParallel(null)
             setShowCreateForm(false)
             reset()
+            setModalError(null)
           }
         }}>
           <div className="modal-content">
@@ -416,6 +457,8 @@ export const AdminParallelsPage = () => {
                 </div>
               </div>
 
+              {modalError && <div className="form-error" style={{ marginBottom: '16px' }}>{modalError}</div>}
+
               <div className="admin-form-actions">
                 <button type="submit" disabled={isSubmitting} className="btn-primary">
                   {isSubmitting ? 'Saving...' : editingParallel ? 'Update Parallel' : 'Create Parallel'}
@@ -426,6 +469,7 @@ export const AdminParallelsPage = () => {
                     setEditingParallel(null)
                     setShowCreateForm(false)
                     reset()
+                    setModalError(null)
                   }} 
                   className="btn-secondary"
                 >
@@ -435,6 +479,16 @@ export const AdminParallelsPage = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {showBulkCreate && (
+        <BulkCreateParallels 
+          onClose={() => setShowBulkCreate(false)} 
+          onComplete={() => {
+            setShowBulkCreate(false);
+            loadParallels();
+          }}
+        />
       )}
 
       <div className="admin-table-container">
