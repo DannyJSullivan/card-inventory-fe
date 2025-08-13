@@ -84,6 +84,55 @@ export const importService = {
     return res.json()
   },
 
+  async uploadImage(metadata: { brand: string; set_name: string; year: number; sport: string; release_date?: string | null; source?: string | null }, file: File): Promise<UploadPreviewResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const params = new URLSearchParams({
+      brand: metadata.brand,
+      set_name: metadata.set_name,
+      year: String(metadata.year),
+      sport: metadata.sport,
+    })
+    if (metadata.release_date) params.append('release_date', metadata.release_date)
+    if (metadata.source) params.append('source', metadata.source)
+
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/upload-image?${params.toString()}`, {
+      method: 'POST',
+      headers: {}, // apiRequest will add auth headers, don't add Content-Type for FormData
+      body: formData,
+    })
+    if (!res.ok) {
+      let msg = 'Image upload failed'
+      try {
+        const data = await res.json()
+        if (Array.isArray(data.detail)) {
+          msg = data.detail.map((d: any) => d.msg).join('; ')
+        } else if (typeof data.detail === 'string') {
+          msg = data.detail
+        }
+        
+        // Enhanced error handling based on status codes
+        switch (res.status) {
+          case 400:
+            msg = `Invalid file: ${msg}`
+            break
+          case 500:
+            msg = `Server error: ${msg}`
+            break
+          case 502:
+            msg = `AI processing failed: ${msg}`
+            break
+          case 504:
+            msg = 'Processing timed out. Try a smaller image.'
+            break
+        }
+      } catch { /* ignore */ }
+      throw new Error(msg)
+    }
+    return res.json()
+  },
+
   async uploadJson(payload: ImportBatchPayload): Promise<UploadPreviewResponse> {
     const res = await apiRequest(`${API_BASE_URL}/admin/imports/upload-json`, {
       method: 'POST',

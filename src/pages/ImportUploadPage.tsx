@@ -4,14 +4,17 @@ import { importService } from '../services/imports'
 import type { ImportBatchPayload, UploadPreviewResponse, ImportBatchMetadata, CardTypeParallels } from '../types/imports'
 import { useNavigate } from 'react-router-dom'
 import { AppNavbar } from '../components/ui/AppNavbar'
+import { ImagePreview } from '../components/ImagePreview'
+import { FileUpload } from '../components/FileUpload'
+import { ImageUploadHelp } from '../components/ImageUploadHelp'
+import { UploadProgress } from '../components/UploadProgress'
 
 export const ImportUploadPage = () => {
   const navigate = useNavigate()
   const [metadata, setMetadata] = useState<ImportBatchMetadata>({ brand: '', set_name: '', year: new Date().getFullYear(), sport: '' })
   const [source, setSource] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [mode, setMode] = useState<'csv' | 'html' | 'json'>('csv')
-  const [fileType, setFileType] = useState<'csv' | 'html'>('csv')
+  const [mode, setMode] = useState<'csv' | 'html' | 'image' | 'json'>('csv')
   const [jsonText, setJsonText] = useState('')
   const [preview, setPreview] = useState<UploadPreviewResponse | null>(null)
   const [batchPayload, setBatchPayload] = useState<ImportBatchPayload | null>(null)
@@ -20,7 +23,6 @@ export const ImportUploadPage = () => {
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
 
   const isJson = mode === 'json'
-  const isFileUpload = mode === 'csv' || mode === 'html'
 
   const uploadFileMutation = useMutation({
     mutationFn: async () => {
@@ -30,6 +32,8 @@ export const ImportUploadPage = () => {
         return importService.uploadCsv({ ...metadata, source: source || undefined }, file)
       } else if (mode === 'html') {
         return importService.uploadHtml({ ...metadata, source: source || undefined }, file)
+      } else if (mode === 'image') {
+        return importService.uploadImage({ ...metadata, source: source || undefined }, file)
       }
       throw new Error('Invalid file upload mode')
     },
@@ -74,28 +78,14 @@ export const ImportUploadPage = () => {
       return 'Converting HTML to PDF and processing with Gemini...'
     } else if (mode === 'csv') {
       return 'Processing CSV with Gemini...'
+    } else if (mode === 'image') {
+      return 'Processing image with AI vision (30-60 seconds)...'
     }
     return 'Uploading...'
   }
 
-  const validateFileType = (file: File) => {
-    if (mode === 'csv') {
-      return file.type === 'text/csv' || file.name.endsWith('.csv')
-    } else if (mode === 'html') {
-      return file.type === 'text/html' || file.name.endsWith('.html') || file.name.endsWith('.htm')
-    }
-    return false
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0] || null
-    if (selectedFile && !validateFileType(selectedFile)) {
-      setError(`Please select a valid ${mode.toUpperCase()} file`)
-      setFile(null)
-      return
-    }
-    setError(null)
-    setFile(selectedFile)
+  const handleFileChange = (newFile: File | null) => {
+    setFile(newFile)
   }
 
   const handleStage = () => {
@@ -192,6 +182,35 @@ export const ImportUploadPage = () => {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setMode('image')}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      background: mode === 'image' ? 'var(--accent-primary)' : 'transparent',
+                      color: mode === 'image' ? 'white' : 'var(--text-secondary)',
+                    }}
+                    onMouseOver={(e) => {
+                      if (mode !== 'image') {
+                        e.currentTarget.style.background = 'var(--bg-secondary)'
+                        e.currentTarget.style.color = 'var(--text-primary)'
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (mode !== 'image') {
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = 'var(--text-secondary)'
+                      }
+                    }}
+                  >
+                    IMAGE
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setMode('json')}
                     style={{
                       padding: '8px 16px',
@@ -255,24 +274,15 @@ export const ImportUploadPage = () => {
                       <input className="form-input" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Vendor / Script / Manual" />
                     </div>
                   </div>
-                  <div style={{ marginBottom: '32px' }}>
-                    <label className="form-label">{mode === 'csv' ? 'CSV File' : 'HTML File'}</label>
-                    <input 
-                      type="file" 
-                      accept={mode === 'csv' ? '.csv' : '.html,.htm'} 
-                      onChange={handleFileChange}
-                    />
-                    {mode === 'html' && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        HTML files will be converted to PDF and processed with Gemini for card data extraction
-                      </div>
-                    )}
-                    {mode === 'csv' && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        CSV files will be processed with Gemini for card data extraction and validation
-                      </div>
-                    )}
-                  </div>
+                  
+                  <FileUpload 
+                    mode={mode}
+                    file={file}
+                    onFileChange={handleFileChange}
+                    onError={setError}
+                  />
+                  
+                  <ImagePreview file={file} mode={mode} />
                 </>
               )}
 
@@ -330,6 +340,11 @@ export const ImportUploadPage = () => {
                 )}
               </div>
               {error && <div className="mt-6 alert alert-error text-sm" style={{ marginBottom: 0 }}>{error}</div>}
+              
+              <UploadProgress 
+                isUploading={uploadFileMutation.isPending || uploadJsonMutation.isPending} 
+                mode={mode} 
+              />
             </div>
 
             {preview && (
@@ -383,6 +398,8 @@ export const ImportUploadPage = () => {
                 </div>
               </div>
             )}
+
+            <ImageUploadHelp visible={mode === 'image'} />
           </div>
 
           {/* Right Column (Workflow + Tips) */}
@@ -391,7 +408,7 @@ export const ImportUploadPage = () => {
               <div className="dashboard-card" style={{ cursor: 'default', padding: '24px' }}>
                 <h2 className="dashboard-card-title" style={{ marginBottom: '16px', fontSize: '16px' }}>Workflow</h2>
                 <ol className="text-sm text-[var(--text-secondary)] list-decimal pl-4 space-y-3">
-                  <li>Upload CSV, HTML, or JSON to generate a preview.</li>
+                  <li>Upload CSV, HTML, Image, or JSON to generate a preview.</li>
                   <li>Validate distinct player & team names, counts & parallels.</li>
                   <li>Stage (JSON mode) to create a batch.</li>
                   <li>Resolve player & team names on next screen.</li>
@@ -402,7 +419,7 @@ export const ImportUploadPage = () => {
               <div className="dashboard-card" style={{ cursor: 'default', padding: '24px' }}>
                 <h2 className="dashboard-card-title" style={{ marginBottom: '16px', fontSize: '16px' }}>Tips</h2>
                 <ul className="text-sm text-[var(--text-secondary)] space-y-3">
-                  <li><strong className="text-[var(--text-tertiary)]">CSV/HTML Mode:</strong> Quick ingestion; HTML converted to PDF via Gemini.</li>
+                  <li><strong className="text-[var(--text-tertiary)]">CSV/HTML/Image Mode:</strong> Quick ingestion; HTML converted to PDF, Images processed with AI vision.</li>
                   <li><strong className="text-[var(--text-tertiary)]">Dedup:</strong> Parallels auto-dedup per card type.</li>
                   <li><strong className="text-[var(--text-tertiary)]">Idempotent:</strong> Upserts by (set, number, type).</li>
                   <li><strong className="text-[var(--text-tertiary)]">Unresolved:</strong> Commit blocked until all names resolved.</li>
