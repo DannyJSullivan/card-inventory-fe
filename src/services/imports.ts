@@ -25,7 +25,7 @@ import type {
   DeleteSectionResponse,
 } from '../types/imports'
 
-const API_BASE_URL = 'http://localhost:8000'
+import { API_BASE_URL } from '../config/api'
 
 export const importService = {
   async uploadCsv(metadata: { brand: string; set_name: string; year: number; sport: string; release_date?: string | null; source?: string | null }, file: File): Promise<UploadPreviewResponse> {

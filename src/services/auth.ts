@@ -1,6 +1,5 @@
 import type { User, LoginRequest, RegisterRequest, LoginResponse, AuthError } from '../types/auth'
-
-const API_BASE_URL = 'http://localhost:8000'
+import { API_BASE_URL } from '../config/api'
 
 class AuthService {
   private getAuthHeaders(): HeadersInit {

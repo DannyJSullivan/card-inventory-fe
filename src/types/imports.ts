@@ -307,7 +307,7 @@ export interface BatchCardTypesResponse {
 export interface MergeBatchesRequest {
   batch_ids: number[]      // Array of batch IDs to merge (minimum 2)
   new_batch_name: string   // Name for the new merged batch
-}
+}1
 
 export interface MergeBatchesResponse {
   new_batch_id: number

@@ -1,6 +1,5 @@
 import { apiRequest } from '../utils/api'
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE_URL as API_BASE } from '../config/api'
 
 interface ApiResponse<T> {
   data?: T;
