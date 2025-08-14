@@ -302,3 +302,21 @@ export interface BatchCardTypesResponse {
     overall_completion: number
   }
 }
+
+// Batch merging types
+export interface MergeBatchesRequest {
+  batch_ids: number[]      // Array of batch IDs to merge (minimum 2)
+  new_batch_name: string   // Name for the new merged batch
+}
+
+export interface MergeBatchesResponse {
+  new_batch_id: number
+  new_batch_name: string
+  merged_batches: number
+  total_rows: number
+  source_batch_ids: number[]
+  brand: string
+  set_name: string
+  year: number
+  sport: string
+}

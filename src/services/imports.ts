@@ -13,6 +13,8 @@ import type {
   BatchRowsResponse,
   GroupedPreviewResponse,
   Candidate,
+  MergeBatchesRequest,
+  MergeBatchesResponse,
 } from '../types/imports'
 
 const API_BASE_URL = 'http://localhost:8000'
@@ -390,6 +392,19 @@ export const importService = {
     if (!res.ok) {
       const error = await res.json()
       throw new Error(error.detail || 'Fetch card types failed')
+    }
+    return res.json()
+  },
+
+  // Merge multiple batches into a single batch
+  async mergeBatches(request: MergeBatchesRequest): Promise<MergeBatchesResponse> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/merge-batches`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.detail || 'Merge batches failed')
     }
     return res.json()
   },

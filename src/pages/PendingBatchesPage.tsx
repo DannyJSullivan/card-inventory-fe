@@ -3,12 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { importService } from '../services/imports'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { useNavigate } from 'react-router-dom'
-import type { PendingBatchSummary } from '../types/imports'
+import { BatchMerger } from '../components/BatchMerger'
+import type { PendingBatchSummary, MergeBatchesResponse } from '../types/imports'
 
 export const PendingBatchesPage = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [batchToDelete, setBatchToDelete] = useState<PendingBatchSummary | null>(null)
+  const [showMerger, setShowMerger] = useState(false)
+  const [mergeSuccess, setMergeSuccess] = useState<string | null>(null)
   
   const { data, isLoading, error } = useQuery({
     queryKey: ['import','pending-batches'],
@@ -38,6 +41,18 @@ export const PendingBatchesPage = () => {
     }
   }
 
+  const handleMergeComplete = (result: MergeBatchesResponse) => {
+    setShowMerger(false)
+    setMergeSuccess(`Successfully merged ${result.merged_batches} batches into "${result.new_batch_name}" (Batch #${result.new_batch_id})`)
+    
+    // Clear success message after 8 seconds
+    setTimeout(() => setMergeSuccess(null), 8000)
+  }
+
+  const handleMergeCancel = () => {
+    setShowMerger(false)
+  }
+
   const batches: PendingBatchSummary[] = data?.pending_batches || []
   return (
     <div className="dashboard-container">
@@ -45,6 +60,58 @@ export const PendingBatchesPage = () => {
       <div className="dashboard-main" style={{ paddingTop: '32px' }}>
         {isLoading && <div className="text-sm">Loading…</div>}
         {error && <div className="text-sm text-red-500">Error loading batches</div>}
+        
+        {/* Success message for merge operations */}
+        {mergeSuccess && (
+          <div style={{ 
+            marginBottom: '24px',
+            padding: '16px',
+            backgroundColor: 'var(--bg-tertiary)',
+            borderRadius: '8px',
+            border: '1px solid var(--accent-primary)',
+            maxWidth: '1100px',
+            width: '100%',
+            margin: '0 auto 24px auto'
+          }}>
+            <div style={{ 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: 'var(--accent-primary)',
+              marginBottom: '4px'
+            }}>
+              ✅ Batches Merged Successfully!
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              {mergeSuccess}
+            </div>
+          </div>
+        )}
+        
+        {!isLoading && !error && batches.length > 0 && (
+          <div style={{ 
+            marginBottom: '24px', 
+            textAlign: 'center',
+            maxWidth: '1100px',
+            width: '100%',
+            margin: '0 auto 24px auto'
+          }}>
+            <button
+              className="dashboard-card-button"
+              onClick={() => setShowMerger(true)}
+              style={{
+                background: 'linear-gradient(135deg, #059669, #047857)',
+                padding: '12px 24px',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #047857, #065f46)'}
+              onMouseOut={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #059669, #047857)'}
+            >
+              Merge Batches
+            </button>
+          </div>
+        )}
+
         {!isLoading && !error && (
           <div style={{ display: 'grid', gap: '24px', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', maxWidth: '1100px', width: '100%', margin: '0 auto' }}>
             {batches.map(b => {
@@ -156,6 +223,15 @@ export const PendingBatchesPage = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Batch Merger Modal */}
+        {showMerger && (
+          <BatchMerger
+            availableBatches={batches.filter(b => b.status !== 'committed')}
+            onMergeComplete={handleMergeComplete}
+            onCancel={handleMergeCancel}
+          />
         )}
       </div>
     </div>
