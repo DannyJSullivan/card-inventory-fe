@@ -14,6 +14,238 @@ const formatScore = (score: number): string => {
   return parseFloat(score.toFixed(2)).toString()
 }
 
+// Merge Cards Modal Component
+interface MergeCardsModalProps {
+  selectedCardIds: number[]
+  selectedCards: CardRow[]
+  batchId: number
+  onClose: () => void
+  onMerge: (request: any) => void
+  isPending: boolean
+}
+
+const MergeCardsModal = ({ selectedCardIds, selectedCards, batchId, onClose, onMerge, isPending }: MergeCardsModalProps) => {
+  const [targetCardId, setTargetCardId] = useState<number>(selectedCardIds[0] || 0)
+  const [mergedCardNumber, setMergedCardNumber] = useState('')
+  const [mergedTitle, setMergedTitle] = useState('')
+
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow
+    document.body.style.overflow = 'hidden'
+    
+    return () => {
+      document.body.style.overflow = originalStyle
+    }
+  }, [])
+
+  const handleMerge = () => {
+    const sourceCardIds = selectedCardIds.filter(id => id !== targetCardId)
+    
+    // Collect all unique players from all selected cards
+    const allPlayersMap = new Map<string, any>()
+    selectedCards.forEach(card => {
+      card.data.players?.forEach(player => {
+        const key = `${player.name}|${player.team_name}`
+        allPlayersMap.set(key, player)
+      })
+    })
+    
+    const allPlayers = Array.from(allPlayersMap.values())
+    
+    const request = {
+      target_row_id: targetCardId,
+      source_row_ids: sourceCardIds,
+      merged_card_data: {
+        card_number: mergedCardNumber || `merged-${targetCardId}`, // card_number is required
+        ...(mergedTitle && { title: mergedTitle }),
+        players: allPlayers // Include all players from selected cards
+      }
+    }
+    
+    onMerge(request)
+  }
+
+  return (
+    <div className="card-edit-modal-backdrop" onClick={onClose}>
+      <div className="card-edit-modal-container" onClick={(e) => e.stopPropagation()}>
+        <div className="card-edit-modal-header">
+          <h2 className="card-edit-modal-title">🔗 Merge Cards</h2>
+          <button onClick={onClose} className="card-edit-modal-close-button">✕</button>
+        </div>
+
+        <div className="card-edit-modal-content">
+          <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+            Merge {selectedCardIds.length} cards into a single card. All players and teams will be combined.
+          </p>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label className="card-edit-modal-label">Target Card (keep this one)</label>
+            <select
+              value={targetCardId}
+              onChange={(e) => setTargetCardId(Number(e.target.value))}
+              className="card-edit-modal-input"
+            >
+              {selectedCardIds.map(id => (
+                <option key={id} value={id}>Card ID: {id}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label className="card-edit-modal-label">Merged Card Number (required)</label>
+            <input
+              type="text"
+              value={mergedCardNumber}
+              onChange={(e) => setMergedCardNumber(e.target.value)}
+              className="card-edit-modal-input"
+              placeholder="Enter card number for merged card"
+              required
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label className="card-edit-modal-label">Merged Title (optional)</label>
+            <input
+              type="text"
+              value={mergedTitle}
+              onChange={(e) => setMergedTitle(e.target.value)}
+              className="card-edit-modal-input"
+              placeholder="Leave blank to keep target card title"
+            />
+          </div>
+        </div>
+
+        <div className="card-edit-modal-footer">
+          <button
+            onClick={onClose}
+            className="card-edit-modal-cancel-button"
+            disabled={isPending}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleMerge}
+            className="card-edit-modal-save-button"
+            disabled={isPending || !mergedCardNumber.trim()}
+          >
+            {isPending ? 'Merging...' : '🔗 Merge Cards'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Split Card Modal Component
+interface SplitCardModalProps {
+  cardRow: CardRow
+  batchId: number
+  onClose: () => void
+  onSplit: (request: any) => void
+  isPending: boolean
+}
+
+const SplitCardModal = ({ cardRow, batchId, onClose, onSplit, isPending }: SplitCardModalProps) => {
+  const [splitCards, setSplitCards] = useState(() => {
+    return cardRow.data.players?.map((player, idx) => ({
+      card_number: `${cardRow.data.card_number || cardRow.row_index}${String.fromCharCode(97 + idx)}`, // 1a, 1b, etc
+      players: [player],
+      inherit_attributes: true
+    })) || []
+  })
+
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow
+    document.body.style.overflow = 'hidden'
+    
+    return () => {
+      document.body.style.overflow = originalStyle
+    }
+  }, [])
+
+  const handleSplit = () => {
+    const request = {
+      source_row_id: cardRow.row_id,
+      split_cards: splitCards
+    }
+    
+    onSplit(request)
+  }
+
+  const updateSplitCard = (index: number, field: string, value: any) => {
+    setSplitCards(prev => {
+      const updated = [...prev]
+      updated[index] = { ...updated[index], [field]: value }
+      return updated
+    })
+  }
+
+  return (
+    <div className="card-edit-modal-backdrop" onClick={onClose}>
+      <div className="card-edit-modal-container" onClick={(e) => e.stopPropagation()}>
+        <div className="card-edit-modal-header">
+          <h2 className="card-edit-modal-title">✂️ Split Card</h2>
+          <button onClick={onClose} className="card-edit-modal-close-button">✕</button>
+        </div>
+
+        <div className="card-edit-modal-content">
+          <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+            Split "{cardRow.data.title || cardRow.data.card_number}" into {splitCards.length} separate cards.
+          </p>
+
+          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            {splitCards.map((splitCard, index) => (
+              <div key={index} style={{
+                padding: '12px',
+                marginBottom: '12px',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px',
+                border: '1px solid var(--border-primary)'
+              }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600' }}>
+                  Card {index + 1}: {splitCard.players[0]?.name || 'Unknown'}
+                </h4>
+                
+                <div style={{ marginBottom: '12px' }}>
+                  <label className="card-edit-modal-label">Card Number</label>
+                  <input
+                    type="text"
+                    value={splitCard.card_number}
+                    onChange={(e) => updateSplitCard(index, 'card_number', e.target.value)}
+                    className="card-edit-modal-input"
+                  />
+                </div>
+
+
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Player: {splitCard.players[0]?.name} ({splitCard.players[0]?.team_name})
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card-edit-modal-footer">
+          <button
+            onClick={onClose}
+            className="card-edit-modal-cancel-button"
+            disabled={isPending}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSplit}
+            className="card-edit-modal-save-button"
+            disabled={isPending || splitCards.length === 0}
+          >
+            {isPending ? 'Splitting...' : '✂️ Split Card'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // Card Edit Modal
 interface CardModalProps { 
@@ -682,6 +914,17 @@ interface CardTypeSectionProps {
   cardEdits: Record<number, CardEditPayload>
   isCollapsed: boolean
   onToggleCollapse: () => void
+  // Bulk selection props
+  selectedCards: Set<number>
+  onCardSelect: (rowId: number, checked: boolean, cardRow?: CardRow) => void
+  onSelectAll: (rows: CardRow[], checked: boolean) => void
+  onBulkToggle: (field: 'is_rookie' | 'is_first' | 'is_autograph', value: boolean) => void
+  onMergeCards: () => void
+  onSplitCard: (row: CardRow) => void
+  bulkEditPending: boolean
+  mergeCardsPending: boolean
+  onDeleteSection: (cardType: string) => void
+  deleteSectionPending: boolean
 }
 
 const CardTypeSection = ({ 
@@ -692,7 +935,17 @@ const CardTypeSection = ({
   onParallelEdit,
   cardEdits,
   isCollapsed,
-  onToggleCollapse 
+  onToggleCollapse,
+  selectedCards,
+  onCardSelect,
+  onSelectAll,
+  onBulkToggle,
+  onMergeCards,
+  onSplitCard,
+  bulkEditPending,
+  mergeCardsPending,
+  onDeleteSection,
+  deleteSectionPending
 }: CardTypeSectionProps) => {
   const cardType = cardTypeInfo.card_type || 'Unknown Card Type'
   const [page, setPage] = useState(1)
@@ -839,16 +1092,21 @@ const CardTypeSection = ({
   return (
     <div className={`collapsible-card ${!isCollapsed ? 'open' : ''}`}>
       <div className="collapsible-card-header">
-        <div className="collapsible-card-left">
-          <button
-            onClick={onToggleCollapse}
-            className="collapsible-card-toggle"
-            aria-expanded={!isCollapsed}
-          >
-            <span className="collapsible-card-toggle-icon">▸</span>
-          </button>
-          <div className="collapsible-card-title-row">
+        <div className="collapsible-card-left" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+          {/* Top row: Toggle button + Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <button
+              onClick={onToggleCollapse}
+              className="collapsible-card-toggle"
+              aria-expanded={!isCollapsed}
+            >
+              <span className="collapsible-card-toggle-icon">▸</span>
+            </button>
             <h2 className="collapsible-card-title">{cardType}</h2>
+          </div>
+          
+          {/* Bottom row: Status badges */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: '32px' }}>
             <span className="collapsible-card-badge">
               {cardTypeInfo.total_cards || 0} cards
             </span>
@@ -867,7 +1125,8 @@ const CardTypeSection = ({
             </span>
           </div>
         </div>
-        <div className="collapsible-card-actions">
+        
+        <div className="collapsible-card-actions" style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
           <button
             onClick={() => onParallelEdit(cardType)}
             className="dashboard-card-button small gradient-indigo"
@@ -888,6 +1147,19 @@ const CardTypeSection = ({
             disabled={rows.length === 0}
           >
             ✓ Approve All
+          </button>
+          <button
+            onClick={() => onDeleteSection(cardType)}
+            className="dashboard-card-button small"
+            disabled={deleteSectionPending}
+            title="Delete all cards in this section"
+            style={{ 
+              backgroundColor: '#dc2626',
+              borderColor: '#dc2626',
+              color: 'white'
+            }}
+          >
+            {deleteSectionPending ? 'Deleting...' : '🗑️ Delete Section'}
           </button>
         </div>
       </div>
@@ -935,12 +1207,90 @@ const CardTypeSection = ({
               )}
             </div>
 
+            {/* Bulk Actions Toolbar */}
+            {selectedCards.size > 0 && (
+              <div style={{
+                padding: '12px',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>
+                  {selectedCards.size} card{selectedCards.size !== 1 ? 's' : ''} selected
+                </span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => onBulkToggle('is_rookie', true)}
+                    className="btn-small btn-edit"
+                    disabled={bulkEditPending}
+                  >
+                    🌟 Mark Rookie
+                  </button>
+                  <button
+                    onClick={() => onBulkToggle('is_rookie', false)}
+                    className="btn-small btn-edit"
+                    disabled={bulkEditPending}
+                  >
+                    ❌ Unmark Rookie
+                  </button>
+                  <button
+                    onClick={() => onBulkToggle('is_first', true)}
+                    className="btn-small btn-edit"
+                    disabled={bulkEditPending}
+                  >
+                    🥇 Mark First
+                  </button>
+                  <button
+                    onClick={() => onBulkToggle('is_first', false)}
+                    className="btn-small btn-edit"
+                    disabled={bulkEditPending}
+                  >
+                    ❌ Unmark First
+                  </button>
+                  <button
+                    onClick={() => onBulkToggle('is_autograph', true)}
+                    className="btn-small btn-edit"
+                    disabled={bulkEditPending}
+                  >
+                    ✍️ Mark Auto
+                  </button>
+                  <button
+                    onClick={() => onBulkToggle('is_autograph', false)}
+                    className="btn-small btn-edit"
+                    disabled={bulkEditPending}
+                  >
+                    ❌ Unmark Auto
+                  </button>
+                  <button
+                    onClick={onMergeCards}
+                    className="btn-small btn-edit"
+                    disabled={selectedCards.size < 2 || mergeCardsPending}
+                    style={{ backgroundColor: '#3b82f6' }}
+                  >
+                    🔗 Merge Cards
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Cards Table */}
             {rows.length > 0 ? (
               <div className="admin-table-container">
                 <table className="admin-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '40px' }}>
+                        <input
+                          type="checkbox"
+                          checked={rows.length > 0 && rows.every(row => selectedCards.has(row.row_id))}
+                          onChange={(e) => onSelectAll(rows, e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </th>
                       <th>Card #</th>
                       <th>Player(s)</th>
                       <th>Team(s)</th>
@@ -971,6 +1321,14 @@ const CardTypeSection = ({
                       
                       return (
                         <tr key={row.row_id} className={cardEdits[row.row_id] ? 'edited-row' : ''}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={selectedCards.has(row.row_id)}
+                              onChange={(e) => onCardSelect(row.row_id, e.target.checked, row)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </td>
                           <td>
                             <div style={{ fontWeight: '500' }}>
                               {base.card_number || row.row_index}
@@ -1076,6 +1434,16 @@ const CardTypeSection = ({
                               >
                                 Edit
                               </button>
+                              {(base.players?.length || 0) > 1 && (
+                                <button
+                                  onClick={() => onSplitCard(row)}
+                                  className="btn-small btn-edit"
+                                  title="Split multi-player card into separate cards"
+                                  style={{ backgroundColor: '#f59e0b' }}
+                                >
+                                  ✂️ Split
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1123,6 +1491,15 @@ export const ImportResolvePage = () => {
   const [parallelModalCardType, setParallelModalCardType] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  
+  // Multi-select state
+  const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set())
+  const [selectedCardsData, setSelectedCardsData] = useState<CardRow[]>([])
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [showSplitModal, setShowSplitModal] = useState(false)
+  const [splitCardRow, setSplitCardRow] = useState<CardRow | null>(null)
+  const [showDeleteSectionConfirm, setShowDeleteSectionConfirm] = useState(false)
+  const [deleteSectionCardType, setDeleteSectionCardType] = useState<string | null>(null)
 
   // Get the preview groups for metadata and candidates
   const groupsQuery = useQuery({ 
@@ -1230,6 +1607,80 @@ export const ImportResolvePage = () => {
     }
   })
 
+  const bulkEditMutation = useMutation({
+    mutationFn: async (edits: any[]) => {
+      return importService.bulkEditCards(idNum, edits)
+    },
+    onSuccess: () => {
+      setSelectedCards(new Set())
+      setSelectedCardsData([])
+      // Invalidate all queries that start with ['import', 'batch', idNum, 'rows']
+      queryClient.invalidateQueries({ 
+        queryKey: ['import', 'batch', idNum, 'rows'],
+        exact: false 
+      })
+      // Also invalidate card types data
+      queryClient.invalidateQueries({ 
+        queryKey: ['import', 'batch', idNum, 'card-types'] 
+      })
+    },
+    onError: (e: any) => {
+      alert(`Bulk edit failed: ${e.message}`)
+    }
+  })
+
+  const mergeCardsMutation = useMutation({
+    mutationFn: async (request: any) => {
+      return importService.mergeCards(idNum, request)
+    },
+    onSuccess: () => {
+      setSelectedCards(new Set())
+      setSelectedCardsData([])
+      setShowMergeModal(false)
+      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'] })
+    },
+    onError: (e: any) => {
+      alert(`Merge cards failed: ${e.message}`)
+    }
+  })
+
+  const splitCardMutation = useMutation({
+    mutationFn: async (request: any) => {
+      return importService.splitCard(idNum, request)
+    },
+    onSuccess: () => {
+      setShowSplitModal(false)
+      setSplitCardRow(null)
+      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'] })
+    },
+    onError: (e: any) => {
+      alert(`Split card failed: ${e.message}`)
+    }
+  })
+
+  const deleteSectionMutation = useMutation({
+    mutationFn: async (cardType: string) => {
+      return importService.deleteCardSection(idNum, cardType)
+    },
+    onSuccess: (data) => {
+      setShowDeleteSectionConfirm(false)
+      setDeleteSectionCardType(null)
+      alert(`Successfully deleted ${data.deleted_count} cards from section`)
+      // Clear selected cards since they might have been deleted
+      setSelectedCards(new Set())
+      setSelectedCardsData([])
+      // Invalidate all related queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'card-types'] })
+      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'], exact: false })
+      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'groups'] })
+      // Force refetch to ensure immediate UI update
+      queryClient.refetchQueries({ queryKey: ['import', 'batch', idNum, 'card-types'] })
+    },
+    onError: (e: any) => {
+      alert(`Delete section failed: ${e.message}`)
+    }
+  })
+
   const deleteMutation = useMutation({
     mutationFn: () => importService.deleteBatch(idNum),
     onSuccess: () => {
@@ -1279,6 +1730,80 @@ export const ImportResolvePage = () => {
     // Apply these parallels to all cards of this type
     // Note: This would require a separate API call to bulk update cards
     // For now, we'll just update the local state
+  }
+
+  // Bulk action functions
+  const handleBulkToggle = (field: 'is_rookie' | 'is_first' | 'is_autograph', value: boolean) => {
+    if (selectedCards.size === 0) return
+    
+    const edits = Array.from(selectedCards).map(rowId => ({
+      row_id: rowId,
+      [field]: value
+    }))
+    
+    bulkEditMutation.mutate(edits)
+  }
+
+  const handleSelectAll = (rows: CardRow[], checked: boolean) => {
+    if (checked) {
+      setSelectedCards(prev => {
+        const newSelected = new Set(prev)
+        rows.forEach(row => newSelected.add(row.row_id))
+        return newSelected
+      })
+      setSelectedCardsData(prev => {
+        const existingIds = new Set(prev.map(card => card.row_id))
+        const newCards = rows.filter(row => !existingIds.has(row.row_id))
+        return [...prev, ...newCards]
+      })
+    } else {
+      setSelectedCards(prev => {
+        const newSelected = new Set(prev)
+        rows.forEach(row => newSelected.delete(row.row_id))
+        return newSelected
+      })
+      const rowIds = new Set(rows.map(row => row.row_id))
+      setSelectedCardsData(prev => prev.filter(card => !rowIds.has(card.row_id)))
+    }
+  }
+
+  const handleCardSelect = (rowId: number, checked: boolean, cardRow?: CardRow) => {
+    setSelectedCards(prev => {
+      const newSelected = new Set(prev)
+      if (checked) {
+        newSelected.add(rowId)
+      } else {
+        newSelected.delete(rowId)
+      }
+      return newSelected
+    })
+    
+    if (checked && cardRow) {
+      setSelectedCardsData(prev => {
+        const exists = prev.some(card => card.row_id === rowId)
+        return exists ? prev : [...prev, cardRow]
+      })
+    } else {
+      setSelectedCardsData(prev => prev.filter(card => card.row_id !== rowId))
+    }
+  }
+
+  const handleMergeCards = () => {
+    if (selectedCards.size < 2) {
+      alert('Please select at least 2 cards to merge')
+      return
+    }
+    setShowMergeModal(true)
+  }
+
+  const handleSplitCard = (row: CardRow) => {
+    setSplitCardRow(row)
+    setShowSplitModal(true)
+  }
+
+  const handleDeleteSection = (cardType: string) => {
+    setDeleteSectionCardType(cardType)
+    setShowDeleteSectionConfirm(true)
   }
 
   return (
@@ -1334,7 +1859,7 @@ export const ImportResolvePage = () => {
 
         {/* Card Type Sections */}
         <div className="space-y-6">
-          {cardTypes.map((cardTypeInfo: CardTypeInfo, index: number) => (
+          {cardTypes.filter(cardTypeInfo => (cardTypeInfo.total_cards || 0) > 0).map((cardTypeInfo: CardTypeInfo, index: number) => (
             <CardTypeSection
               key={cardTypeInfo.card_type || `card-type-${index}`}
               batchId={idNum}
@@ -1345,9 +1870,19 @@ export const ImportResolvePage = () => {
               cardEdits={cardEdits}
               isCollapsed={collapsedSections[cardTypeInfo.card_type] ?? true}
               onToggleCollapse={() => toggleSection(cardTypeInfo.card_type)}
+              selectedCards={selectedCards}
+              onCardSelect={handleCardSelect}
+              onSelectAll={handleSelectAll}
+              onBulkToggle={handleBulkToggle}
+              onMergeCards={handleMergeCards}
+              onSplitCard={handleSplitCard}
+              bulkEditPending={bulkEditMutation.isPending}
+              mergeCardsPending={mergeCardsMutation.isPending}
+              onDeleteSection={handleDeleteSection}
+              deleteSectionPending={deleteSectionMutation.isPending}
             />
           ))}
-          {cardTypes.length === 0 && (
+          {cardTypes.filter(cardTypeInfo => (cardTypeInfo.total_cards || 0) > 0).length === 0 && (
             <div className="text-sm text-gray-400 text-center py-20 border border-dashed border-gray-700 rounded-lg">
               No card types found in this batch.
             </div>
@@ -1407,7 +1942,91 @@ export const ImportResolvePage = () => {
           />
         )}
 
-        {/* Delete Confirmation Modal */}
+        {/* Merge Cards Modal */}
+        {showMergeModal && (
+          <MergeCardsModal
+            selectedCardIds={Array.from(selectedCards)}
+            selectedCards={selectedCardsData}
+            batchId={idNum}
+            onClose={() => setShowMergeModal(false)}
+            onMerge={(request) => mergeCardsMutation.mutate(request)}
+            isPending={mergeCardsMutation.isPending}
+          />
+        )}
+
+        {/* Split Card Modal */}
+        {showSplitModal && splitCardRow && (
+          <SplitCardModal
+            cardRow={splitCardRow}
+            batchId={idNum}
+            onClose={() => {
+              setShowSplitModal(false)
+              setSplitCardRow(null)
+            }}
+            onSplit={(request) => splitCardMutation.mutate(request)}
+            isPending={splitCardMutation.isPending}
+          />
+        )}
+
+        {/* Delete Section Confirmation Modal */}
+        {showDeleteSectionConfirm && deleteSectionCardType && (
+          <div className="modal-overlay" onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteSectionConfirm(false)
+              setDeleteSectionCardType(null)
+            }
+          }}>
+            <div className="modal-content">
+              <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: 'var(--text-primary)' }}>
+                Delete Card Section
+              </h2>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  Are you sure you want to delete ALL cards in this section? This action cannot be undone.
+                </p>
+                
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  borderRadius: '8px',
+                  fontSize: '13px'
+                }}>
+                  <div><strong>Card Type:</strong> {deleteSectionCardType}</div>
+                  <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                    All cards of this type will be permanently deleted
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button 
+                  onClick={() => {
+                    setShowDeleteSectionConfirm(false)
+                    setDeleteSectionCardType(null)
+                  }}
+                  className="btn-secondary"
+                  disabled={deleteSectionMutation.isPending}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => deleteSectionMutation.mutate(deleteSectionCardType)}
+                  className="btn-primary"
+                  disabled={deleteSectionMutation.isPending}
+                  style={{ 
+                    backgroundColor: '#dc2626',
+                    borderColor: '#dc2626'
+                  }}
+                >
+                  {deleteSectionMutation.isPending ? 'Deleting...' : 'Delete Section'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Batch Confirmation Modal */}
         {showDeleteConfirm && (
           <div className="modal-overlay" onClick={(e) => {
             if (e.target === e.currentTarget) {

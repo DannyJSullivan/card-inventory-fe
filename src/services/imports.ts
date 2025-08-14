@@ -15,6 +15,14 @@ import type {
   Candidate,
   MergeBatchesRequest,
   MergeBatchesResponse,
+  BulkEditResponse,
+  MergeCardsRequest,
+  MergeCardsResponse,
+  SplitCardRequest,
+  SplitCardResponse,
+  CardEdit,
+  DeleteSectionRequest,
+  DeleteSectionResponse,
 } from '../types/imports'
 
 const API_BASE_URL = 'http://localhost:8000'
@@ -405,6 +413,58 @@ export const importService = {
     if (!res.ok) {
       const error = await res.json()
       throw new Error(error.detail || 'Merge batches failed')
+    }
+    return res.json()
+  },
+
+  // Bulk edit cards in a batch
+  async bulkEditCards(batchId: number, edits: CardEdit[]): Promise<BulkEditResponse> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/bulk-edit`, {
+      method: 'POST',
+      body: JSON.stringify({ edits }),
+    })
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.detail || 'Bulk edit failed')
+    }
+    return res.json()
+  },
+
+  // Merge multiple cards into a single card
+  async mergeCards(batchId: number, request: MergeCardsRequest): Promise<MergeCardsResponse> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/merge-cards`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.detail || 'Merge cards failed')
+    }
+    return res.json()
+  },
+
+  // Split a single card into multiple cards
+  async splitCard(batchId: number, request: SplitCardRequest): Promise<SplitCardResponse> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/split-card`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.detail || 'Split card failed')
+    }
+    return res.json()
+  },
+
+  // Delete all cards of a specific card type in a batch
+  async deleteCardSection(batchId: number, cardType: string): Promise<DeleteSectionResponse> {
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}/delete-section`, {
+      method: 'POST',
+      body: JSON.stringify({ card_type: cardType }),
+    })
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.detail || 'Delete section failed')
     }
     return res.json()
   },

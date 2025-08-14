@@ -16,7 +16,7 @@ export const ImportUploadPage = () => {
   const [source, setSource] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [files, setFiles] = useState<File[]>([])
-  const [mode, setMode] = useState<'csv' | 'html' | 'image' | 'pdf' | 'json'>('csv')
+  const [mode, setMode] = useState<'csv' | 'html' | 'image' | 'pdf' | 'json'>('pdf')
   const [jsonText, setJsonText] = useState('')
   const [preview, setPreview] = useState<UploadPreviewResponse | null>(null)
   const [batchPayload, setBatchPayload] = useState<ImportBatchPayload | null>(null)
@@ -83,7 +83,7 @@ export const ImportUploadPage = () => {
       setJsonText('')
       setFile(null)
       setFiles([])
-      setMode('csv')
+      setMode('pdf')
       setMultiplePdfMode(false)
       // Clear success message after 10 seconds
       setTimeout(() => setSuccessMessage(null), 10000)
@@ -162,7 +162,7 @@ export const ImportUploadPage = () => {
                 }}>
                   <button
                     type="button"
-                    onClick={() => setMode('csv')}
+                    onClick={() => setMode('pdf')}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '6px',
@@ -171,52 +171,23 @@ export const ImportUploadPage = () => {
                       fontWeight: '500',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      background: mode === 'csv' ? 'var(--accent-primary)' : 'transparent',
-                      color: mode === 'csv' ? 'white' : 'var(--text-secondary)',
+                      background: mode === 'pdf' ? 'var(--accent-primary)' : 'transparent',
+                      color: mode === 'pdf' ? 'white' : 'var(--text-secondary)',
                     }}
                     onMouseOver={(e) => {
-                      if (mode !== 'csv') {
+                      if (mode !== 'pdf') {
                         e.currentTarget.style.background = 'var(--bg-secondary)'
                         e.currentTarget.style.color = 'var(--text-primary)'
                       }
                     }}
                     onMouseOut={(e) => {
-                      if (mode !== 'csv') {
+                      if (mode !== 'pdf') {
                         e.currentTarget.style.background = 'transparent'
                         e.currentTarget.style.color = 'var(--text-secondary)'
                       }
                     }}
                   >
-                    CSV
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('html')}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      background: mode === 'html' ? 'var(--accent-primary)' : 'transparent',
-                      color: mode === 'html' ? 'white' : 'var(--text-secondary)',
-                    }}
-                    onMouseOver={(e) => {
-                      if (mode !== 'html') {
-                        e.currentTarget.style.background = 'var(--bg-secondary)'
-                        e.currentTarget.style.color = 'var(--text-primary)'
-                      }
-                    }}
-                    onMouseOut={(e) => {
-                      if (mode !== 'html') {
-                        e.currentTarget.style.background = 'transparent'
-                        e.currentTarget.style.color = 'var(--text-secondary)'
-                      }
-                    }}
-                  >
-                    HTML
+                    PDF
                   </button>
                   <button
                     type="button"
@@ -249,7 +220,7 @@ export const ImportUploadPage = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMode('pdf')}
+                    onClick={() => setMode('html')}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '6px',
@@ -258,23 +229,52 @@ export const ImportUploadPage = () => {
                       fontWeight: '500',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      background: mode === 'pdf' ? 'var(--accent-primary)' : 'transparent',
-                      color: mode === 'pdf' ? 'white' : 'var(--text-secondary)',
+                      background: mode === 'html' ? 'var(--accent-primary)' : 'transparent',
+                      color: mode === 'html' ? 'white' : 'var(--text-secondary)',
                     }}
                     onMouseOver={(e) => {
-                      if (mode !== 'pdf') {
+                      if (mode !== 'html') {
                         e.currentTarget.style.background = 'var(--bg-secondary)'
                         e.currentTarget.style.color = 'var(--text-primary)'
                       }
                     }}
                     onMouseOut={(e) => {
-                      if (mode !== 'pdf') {
+                      if (mode !== 'html') {
                         e.currentTarget.style.background = 'transparent'
                         e.currentTarget.style.color = 'var(--text-secondary)'
                       }
                     }}
                   >
-                    PDF
+                    HTML
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode('csv')}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      background: mode === 'csv' ? 'var(--accent-primary)' : 'transparent',
+                      color: mode === 'csv' ? 'white' : 'var(--text-secondary)',
+                    }}
+                    onMouseOver={(e) => {
+                      if (mode !== 'csv') {
+                        e.currentTarget.style.background = 'var(--bg-secondary)'
+                        e.currentTarget.style.color = 'var(--text-primary)'
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (mode !== 'csv') {
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = 'var(--text-secondary)'
+                      }
+                    }}
+                  >
+                    CSV
                   </button>
                   <button
                     type="button"
@@ -451,7 +451,8 @@ export const ImportUploadPage = () => {
                 </div>
               )}
 
-              <div className="flex gap-4 flex-wrap">
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
+                {/* Upload & Preview Button */}
                 <button
                   className="dashboard-card-button"
                   style={{ background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-hover))', width: 'auto', padding: '12px 26px', fontSize: '13px' }}
@@ -461,7 +462,17 @@ export const ImportUploadPage = () => {
                   {uploadFileMutation.isPending || uploadJsonMutation.isPending ? getLoadingMessage() : 'Upload & Preview'}
                 </button>
                 
-                {/* Show Copy JSON and Stage buttons when preview exists and in JSON mode */}
+                {/* Vertical separator when preview exists */}
+                {preview && (
+                  <div style={{
+                    width: '1px',
+                    height: '32px',
+                    backgroundColor: 'var(--border-primary)',
+                    margin: '0 8px'
+                  }} />
+                )}
+                
+                {/* Copy JSON and Stage buttons when preview exists and in JSON mode */}
                 {preview && isJson && (
                   <>
                     <button
@@ -480,6 +491,15 @@ export const ImportUploadPage = () => {
                     >
                       {copyState === 'copied' ? 'Copied!' : 'Copy JSON'}
                     </button>
+                    
+                    {/* Separator between Copy JSON and Stage */}
+                    <div style={{
+                      width: '1px',
+                      height: '32px',
+                      backgroundColor: 'var(--border-primary)',
+                      margin: '0 8px'
+                    }} />
+                    
                     <button
                       type="button"
                       onClick={handleStage}

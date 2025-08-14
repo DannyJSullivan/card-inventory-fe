@@ -320,3 +320,69 @@ export interface MergeBatchesResponse {
   year: number
   sport: string
 }
+
+// Bulk card operations - updated to match backend
+export interface CardEdit {
+  row_id: number
+  card_number?: string
+  card_type?: string
+  title?: string
+  subset?: string
+  notes?: string
+  is_rookie?: boolean
+  is_first?: boolean
+  is_autograph?: boolean
+  players?: ImportPlayerRef[]
+}
+
+export interface BulkEditResponse {
+  updated_count: number
+  success: boolean
+}
+
+// Card merge operations - updated to match backend
+export interface MergedCardData {
+  card_number: string
+  title?: string
+  players: ImportPlayerRef[]
+}
+
+export interface MergeCardsRequest {
+  target_row_id: number
+  source_row_ids: number[]
+  merged_card_data: MergedCardData
+}
+
+export interface MergeCardsResponse {
+  target_row_id: number
+  deleted_row_ids: number[]
+  success: boolean
+}
+
+// Card split operations - updated to match backend
+export interface SplitCardData {
+  card_number: string
+  players: ImportPlayerRef[]
+  inherit_attributes?: boolean // defaults to true
+}
+
+export interface SplitCardRequest {
+  source_row_id: number
+  split_cards: SplitCardData[] // minimum 2 cards
+}
+
+export interface SplitCardResponse {
+  original_row_id: number
+  new_row_ids: number[]
+  success: boolean
+}
+
+// Delete card section operations
+export interface DeleteSectionRequest {
+  card_type: string
+}
+
+export interface DeleteSectionResponse {
+  deleted_count: number
+  success: boolean
+}
