@@ -1343,7 +1343,7 @@ export const ImportResolvePage = () => {
               onCardEdit={setActiveRow}
               onParallelEdit={setParallelModalCardType}
               cardEdits={cardEdits}
-              isCollapsed={collapsedSections[cardTypeInfo.card_type] || false}
+              isCollapsed={collapsedSections[cardTypeInfo.card_type] ?? true}
               onToggleCollapse={() => toggleSection(cardTypeInfo.card_type)}
             />
           ))}
