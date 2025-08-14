@@ -1266,7 +1266,7 @@ export const ImportResolvePage = () => {
   const toggleSection = (cardType: string) => {
     setCollapsedSections(prev => ({
       ...prev,
-      [cardType]: !prev[cardType]
+      [cardType]: !(prev[cardType] ?? true)
     }))
   }
   
