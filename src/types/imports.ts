@@ -377,11 +377,7 @@ export interface SplitCardResponse {
   success: boolean
 }
 
-// Delete card section operations
-export interface DeleteSectionRequest {
-  card_type: string
-}
-
+// Delete card section operations  
 export interface DeleteSectionResponse {
   deleted_count: number
   success: boolean

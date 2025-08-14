@@ -18,13 +18,12 @@ const formatScore = (score: number): string => {
 interface MergeCardsModalProps {
   selectedCardIds: number[]
   selectedCards: CardRow[]
-  batchId: number
   onClose: () => void
   onMerge: (request: any) => void
   isPending: boolean
 }
 
-const MergeCardsModal = ({ selectedCardIds, selectedCards, batchId, onClose, onMerge, isPending }: MergeCardsModalProps) => {
+const MergeCardsModal = ({ selectedCardIds, selectedCards, onClose, onMerge, isPending }: MergeCardsModalProps) => {
   const [targetCardId, setTargetCardId] = useState<number>(selectedCardIds[0] || 0)
   const [mergedCardNumber, setMergedCardNumber] = useState('')
   const [mergedTitle, setMergedTitle] = useState('')
@@ -139,13 +138,12 @@ const MergeCardsModal = ({ selectedCardIds, selectedCards, batchId, onClose, onM
 // Split Card Modal Component
 interface SplitCardModalProps {
   cardRow: CardRow
-  batchId: number
   onClose: () => void
   onSplit: (request: any) => void
   isPending: boolean
 }
 
-const SplitCardModal = ({ cardRow, batchId, onClose, onSplit, isPending }: SplitCardModalProps) => {
+const SplitCardModal = ({ cardRow, onClose, onSplit, isPending }: SplitCardModalProps) => {
   const [splitCards, setSplitCards] = useState(() => {
     return cardRow.data.players?.map((player, idx) => ({
       card_number: `${cardRow.data.card_number || cardRow.row_index}${String.fromCharCode(97 + idx)}`, // 1a, 1b, etc
@@ -1859,7 +1857,7 @@ export const ImportResolvePage = () => {
 
         {/* Card Type Sections */}
         <div className="space-y-6">
-          {cardTypes.filter(cardTypeInfo => (cardTypeInfo.total_cards || 0) > 0).map((cardTypeInfo: CardTypeInfo, index: number) => (
+          {cardTypes.filter((cardTypeInfo: CardTypeInfo) => (cardTypeInfo.total_cards || 0) > 0).map((cardTypeInfo: CardTypeInfo, index: number) => (
             <CardTypeSection
               key={cardTypeInfo.card_type || `card-type-${index}`}
               batchId={idNum}
@@ -1882,7 +1880,7 @@ export const ImportResolvePage = () => {
               deleteSectionPending={deleteSectionMutation.isPending}
             />
           ))}
-          {cardTypes.filter(cardTypeInfo => (cardTypeInfo.total_cards || 0) > 0).length === 0 && (
+          {cardTypes.filter((cardTypeInfo: CardTypeInfo) => (cardTypeInfo.total_cards || 0) > 0).length === 0 && (
             <div className="text-sm text-gray-400 text-center py-20 border border-dashed border-gray-700 rounded-lg">
               No card types found in this batch.
             </div>
@@ -1947,7 +1945,6 @@ export const ImportResolvePage = () => {
           <MergeCardsModal
             selectedCardIds={Array.from(selectedCards)}
             selectedCards={selectedCardsData}
-            batchId={idNum}
             onClose={() => setShowMergeModal(false)}
             onMerge={(request) => mergeCardsMutation.mutate(request)}
             isPending={mergeCardsMutation.isPending}
@@ -1958,7 +1955,6 @@ export const ImportResolvePage = () => {
         {showSplitModal && splitCardRow && (
           <SplitCardModal
             cardRow={splitCardRow}
-            batchId={idNum}
             onClose={() => {
               setShowSplitModal(false)
               setSplitCardRow(null)

@@ -33,7 +33,7 @@ class AdminService {
       // Handle empty responses (common for DELETE operations)
       const text = await response.text();
       if (!text) {
-        return { data: null };
+        return { data: undefined };
       }
 
       try {
@@ -41,7 +41,7 @@ class AdminService {
         return { data };
       } catch {
         // If it's not JSON, return the text as data
-        return { data: text };
+        return { data: text as T };
       }
     } catch (error) {
       return {

@@ -89,7 +89,7 @@ export const AdminPlayersPage = () => {
       if (result.error) {
         setError(`Failed to load players: ${result.error}`)
         setPlayers([])
-      } else if (result.data && 'items' in result.data) {
+      } else if (result.data && typeof result.data === 'object' && 'items' in result.data) {
         const paginatedData = result.data as any
         setPlayers(paginatedData.items || [])
         setTotalItems(paginatedData.total || 0)
@@ -383,7 +383,7 @@ export const AdminPlayersPage = () => {
                     <button 
                       onClick={() => handleDelete(player.id)} 
                       className="btn-small btn-delete"
-                      disabled={player.card_count && player.card_count > 0}
+                      disabled={!!(player.card_count && player.card_count > 0)}
                       title={player.card_count && player.card_count > 0 ? 'Cannot delete player with cards' : 'Delete player'}
                     >
                       Delete

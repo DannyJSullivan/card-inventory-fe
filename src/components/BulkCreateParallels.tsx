@@ -26,7 +26,7 @@ interface BulkCreateResponse {
 export const BulkCreateParallels = ({ onClose, onComplete }: { onClose: () => void, onComplete: () => void }) => {
   const [response, setResponse] = useState<BulkCreateResponse | null>(null);
   const [mode, setMode] = useState('form'); // form or json
-  const { control, handleSubmit, setValue, formState: { isSubmitting, errors } } = useForm<BulkCreateFormData>({
+  const { control, handleSubmit, formState: { isSubmitting, errors } } = useForm<BulkCreateFormData>({
     defaultValues: {
       parallels: [{ parallel_name: '' }]
     }
@@ -77,7 +77,9 @@ export const BulkCreateParallels = ({ onClose, onComplete }: { onClose: () => vo
 
     const result = await adminService.bulkCreateParallels(parallelsToSubmit);
     if (result.data) {
-      setResponse(result.data);
+      setResponse(result.data as BulkCreateResponse);
+    } else {
+      setResponse(null);
     }
   };
 

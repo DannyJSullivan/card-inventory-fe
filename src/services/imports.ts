@@ -21,7 +21,6 @@ import type {
   SplitCardRequest,
   SplitCardResponse,
   CardEdit,
-  DeleteSectionRequest,
   DeleteSectionResponse,
 } from '../types/imports'
 

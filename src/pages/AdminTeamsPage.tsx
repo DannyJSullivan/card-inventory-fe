@@ -89,7 +89,7 @@ export const AdminTeamsPage = () => {
       if (result.error) {
         setError(`Failed to load teams: ${result.error}`)
         setTeams([])
-      } else if (result.data && 'items' in result.data) {
+      } else if (result.data && typeof result.data === 'object' && 'items' in result.data) {
         const paginatedData = result.data as any
         setTeams(paginatedData.items || [])
         setTotalItems(paginatedData.total || 0)
@@ -383,7 +383,7 @@ export const AdminTeamsPage = () => {
                     <button 
                       onClick={() => handleDelete(team.id)} 
                       className="btn-small btn-delete"
-                      disabled={team.card_count && team.card_count > 0}
+                      disabled={!!(team.card_count && team.card_count > 0)}
                       title={team.card_count && team.card_count > 0 ? 'Cannot delete team with cards' : 'Delete team'}
                     >
                       Delete

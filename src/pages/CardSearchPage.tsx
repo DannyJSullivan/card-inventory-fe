@@ -7,12 +7,12 @@ const CardSearchPage = () => {
   const [filters, setFilters] = useState<CardSearchFilters>({})
   const [debouncedFilters, setDebouncedFilters] = useState<CardSearchFilters>({})
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize] = useState(20)
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'card_number' | 'year' | 'brand_name' | 'set_name'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [hasSearched, setHasSearched] = useState(false)
   const [isDebouncing, setIsDebouncing] = useState(false)
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const debounceTimeoutRef = useRef<number | null>(null)
 
   // Debounce effect for filters
   useEffect(() => {

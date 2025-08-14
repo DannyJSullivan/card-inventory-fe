@@ -299,7 +299,7 @@ export const AdminBrandsPage = () => {
                     <button 
                       onClick={() => handleDelete(brand.id)} 
                       className="btn-small btn-delete"
-                      disabled={brand.set_count && brand.set_count > 0}
+                      disabled={!!(brand.set_count && brand.set_count > 0)}
                       title={brand.set_count && brand.set_count > 0 ? 'Cannot delete brand with sets' : 'Delete brand'}
                     >
                       Delete

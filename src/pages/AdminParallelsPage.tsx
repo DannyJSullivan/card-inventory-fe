@@ -118,7 +118,7 @@ export const AdminParallelsPage = () => {
       } else {
         rarity = 'Common'
       }
-      setValue('rarity_level', rarity)
+      setValue('rarity_level', rarity as 'Common' | 'Uncommon' | 'Rare' | 'Super Rare' | 'Ultra Rare')
     }
   }, [printRun, editingParallel, setValue])
 

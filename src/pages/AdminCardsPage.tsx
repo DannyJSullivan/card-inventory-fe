@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link } from 'react-router'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { adminService } from '../services/adminService'
 
@@ -120,9 +119,6 @@ export const AdminCardsPage = () => {
   const [searchedSets, setSearchedSets] = useState<SetOption[]>([])
   const [searchedPlayers, setSearchedPlayers] = useState<PlayerOption[]>([])
   const [searchedTeams, setSearchedTeams] = useState<TeamOption[]>([])
-  const [setsLoading, setSetsLoading] = useState(false)
-  const [playersLoading, setPlayersLoading] = useState(false)
-  const [teamsLoading, setTeamsLoading] = useState(false)
   
   // Selected form values
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([])
@@ -259,47 +255,47 @@ export const AdminCardsPage = () => {
   }
 
   const loadSets = async () => {
-    setSetsLoading(true)
+    // setSetsLoading(true)
     try {
       const result = await adminService.getSets(0, 100, 'name', 'asc')
       if (result.error) {
         setError(`Failed to load sets: ${result.error}`)
-      } else if (result.data && 'items' in result.data) {
+      } else if (result.data && typeof result.data === 'object' && 'items' in result.data) {
         setAvailableSets(result.data.items || [])
       }
     } catch (err) {
       setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     } finally {
-      setSetsLoading(false)
+      // setSetsLoading(false)
     }
   }
 
   const searchSets = async (searchTerm: string) => {
-    setSetsLoading(true)
+    // setSetsLoading(true)
     try {
       const result = await adminService.getSets(0, 20, 'name', 'asc', searchTerm)
       if (result.error) {
         setError(`Failed to search sets: ${result.error}`)
-      } else if (result.data && 'items' in result.data) {
+      } else if (result.data && typeof result.data === 'object' && 'items' in result.data) {
         setSearchedSets(result.data.items || [])
       }
     } catch (err) {
       setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     } finally {
-      setSetsLoading(false)
+      // setSetsLoading(false)
     }
   }
 
   const loadPlayers = async () => {
-    setPlayersLoading(true)
+    // setPlayersLoading(true)
     try {
       const result = await adminService.getPlayers(undefined, 0, 100)
       if (result.error) {
         setError(`Failed to load players: ${result.error}`)
       } else if (result.data) {
         // Handle both paginated and direct array responses
-        if ('items' in result.data) {
-          setAvailablePlayers(result.data.items || [])
+        if (result.data && typeof result.data === 'object' && 'items' in result.data) {
+          setAvailablePlayers((result.data.items || []) as PlayerOption[])
         } else if (Array.isArray(result.data)) {
           setAvailablePlayers(result.data)
         } else {
@@ -309,20 +305,20 @@ export const AdminCardsPage = () => {
     } catch (err) {
       setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     } finally {
-      setPlayersLoading(false)
+      // setPlayersLoading(false)
     }
   }
 
   const loadTeams = async () => {
-    setTeamsLoading(true)
+    // setTeamsLoading(true)
     try {
       const result = await adminService.getTeams(undefined, 0, 100)
       if (result.error) {
         setError(`Failed to load teams: ${result.error}`)
       } else if (result.data) {
         // Handle both paginated and direct array responses
-        if ('items' in result.data) {
-          setAvailableTeams(result.data.items || [])
+        if (result.data && typeof result.data === 'object' && 'items' in result.data) {
+          setAvailableTeams((result.data.items || []) as TeamOption[])
         } else if (Array.isArray(result.data)) {
           setAvailableTeams(result.data)
         } else {
@@ -332,22 +328,22 @@ export const AdminCardsPage = () => {
     } catch (err) {
       setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     } finally {
-      setTeamsLoading(false)
+      // setTeamsLoading(false)
     }
   }
 
   const searchPlayers = async (searchTerm: string) => {
-    setPlayersLoading(true)
+    // setPlayersLoading(true)
     try {
       const result = await adminService.getPlayers(undefined, 0, 20, searchTerm)
       if (result.error) {
         setError(`Failed to search players: ${result.error}`)
       } else if (result.data) {
         // Handle both paginated and direct array responses
-        if ('items' in result.data) {
-          setSearchedPlayers(result.data.items || [])
+        if (result.data && typeof result.data === 'object' && 'items' in result.data) {
+          setSearchedPlayers((result.data.items || []) as PlayerOption[])
         } else if (Array.isArray(result.data)) {
-          setSearchedPlayers(result.data)
+          setSearchedPlayers(result.data as PlayerOption[])
         } else {
           setSearchedPlayers([])
         }
@@ -355,22 +351,22 @@ export const AdminCardsPage = () => {
     } catch (err) {
       setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     } finally {
-      setPlayersLoading(false)
+      // setPlayersLoading(false)
     }
   }
 
   const searchTeams = async (searchTerm: string) => {
-    setTeamsLoading(true)
+    // setTeamsLoading(true)
     try {
       const result = await adminService.getTeams(undefined, 0, 20, searchTerm)
       if (result.error) {
         setError(`Failed to search teams: ${result.error}`)
       } else if (result.data) {
         // Handle both paginated and direct array responses
-        if ('items' in result.data) {
-          setSearchedTeams(result.data.items || [])
+        if (result.data && typeof result.data === 'object' && 'items' in result.data) {
+          setSearchedTeams((result.data.items || []) as TeamOption[])
         } else if (Array.isArray(result.data)) {
-          setSearchedTeams(result.data)
+          setSearchedTeams(result.data as TeamOption[])
         } else {
           setSearchedTeams([])
         }
@@ -378,7 +374,7 @@ export const AdminCardsPage = () => {
     } catch (err) {
       setError(`Network error: ${err instanceof Error ? err.message : 'Unable to connect to server'}`)
     } finally {
-      setTeamsLoading(false)
+      // setTeamsLoading(false)
     }
   }
 
