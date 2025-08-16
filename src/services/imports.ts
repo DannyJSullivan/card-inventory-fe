@@ -381,6 +381,19 @@ export const importService = {
     return res.json()
   },
 
+  async searchParallelCandidates(query: string, printRun?: number | null, limit: number = 10): Promise<Candidate[]> {
+    const params = new URLSearchParams({
+      query: query.trim(),
+      limit: String(limit)
+    })
+    if (printRun !== null && printRun !== undefined) {
+      params.set('print_run', String(printRun))
+    }
+    const res = await apiRequest(`${API_BASE_URL}/admin/imports/search-parallel-candidates?${params}`)
+    if (!res.ok) throw new Error((await res.json()).detail || 'Search parallel candidates failed')
+    return res.json()
+  },
+
   // Delete import batch
   async deleteBatch(batchId: number): Promise<any> {
     const res = await apiRequest(`${API_BASE_URL}/admin/imports/${batchId}`, {

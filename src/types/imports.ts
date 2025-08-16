@@ -22,6 +22,14 @@ export interface ImportParallelRef {
   odds?: string | null
 }
 
+// For the resolution UI parallel grouping
+export interface ImportParallel {
+  name: string
+  print_run?: number | null
+  original_print_run_text?: string | null
+  odds?: string | null
+}
+
 // Renamed: ImportItem -> ImportCard
 export interface ImportCard {
   row_index?: number | null
@@ -84,6 +92,10 @@ export interface Candidate {
   id: number
   name: string
   score: number // 0-100
+  // Additional fields for parallel candidates
+  print_run: number | null // Now consistently provided by backend
+  parallel_name?: string // The actual parallel name for context
+  original_text?: string // Optional context field
 }
 
 export interface CardTypeParallels {
@@ -147,9 +159,23 @@ export interface ResolveNewTeam {
 }
 export type ResolveTeam = ResolveExistingTeam | ResolveNewTeam
 
+// New parallel resolution types
+export interface ResolveExistingParallel {
+  card_type: string
+  name: string
+  parallel_type_id: number
+}
+export interface ResolveNewParallel {
+  card_type: string
+  name: string
+  create_if_missing: { name: string }
+}
+export type ResolveParallel = ResolveExistingParallel | ResolveNewParallel
+
 export interface ResolveRequest {
   players?: ResolvePlayer[]
   teams?: ResolveTeam[]
+  parallels?: ResolveParallel[]  // New field
   card_edits?: CardEditPayload[]
 }
 
@@ -266,6 +292,9 @@ export interface GroupedPreviewResponse {
   team_names: string[]
   player_candidates: Record<string, Candidate[]>
   team_candidates: Record<string, Candidate[]>
+  // New parallel fields
+  parallel_groups: Record<string, ImportParallel[]>
+  parallel_candidates: Record<string, Candidate[]>
 }
 
 export interface RowData {
@@ -307,7 +336,7 @@ export interface BatchCardTypesResponse {
 export interface MergeBatchesRequest {
   batch_ids: number[]      // Array of batch IDs to merge (minimum 2)
   new_batch_name: string   // Name for the new merged batch
-}1
+}
 
 export interface MergeBatchesResponse {
   new_batch_id: number

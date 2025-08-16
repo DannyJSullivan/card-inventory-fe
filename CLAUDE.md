@@ -56,7 +56,10 @@ npm run lint         # Run ESLint
 - **Zustand 5.0** for client state management
 - **React Router 7.8** for routing
 - **React Hook Form 7.62** for form handling
-- **Future**: React Query for server state management (not yet implemented)
+- **React Query 5.84** for server state management (implemented)
+- **React Table 8.20** for data table management
+- **Headless UI 2.2** for accessible UI components
+- **Heroicons 2.2** for iconography
 
 ## Architecture Overview
 
@@ -106,7 +109,7 @@ const useAuthStore = create<AuthStore>((set, get) => ({
 ```
 
 ### Backend Integration
-- **Base API URL**: `http://localhost:8000`
+- **Base API URL**: Configurable via `VITE_API_URL` environment variable (defaults to `http://localhost:8000`)
 - **Authentication Endpoints**:
   - `POST /auth/login` - Form-encoded credentials (not JSON)
   - `POST /auth/register` - JSON payload
@@ -117,6 +120,9 @@ const useAuthStore = create<AuthStore>((set, get) => ({
 - **Import System Endpoints**:
   - `POST /admin/imports/upload-csv` - CSV file upload with Gemini processing
   - `POST /admin/imports/upload-html` - HTML file upload with PDF conversion + Gemini
+  - `POST /admin/imports/upload-pdf` - PDF file upload with Gemini processing
+  - `POST /admin/imports/upload-image` - Image file upload with Gemini processing
+  - `POST /admin/imports/upload-multiple-pdfs` - Multiple PDF batch upload
   - `POST /admin/imports/upload-json` - Direct JSON payload upload
   - `POST /admin/imports/stage` - Stage batch for resolution
   - `GET /admin/imports/{id}/preview-groups` - Get resolution candidates
@@ -174,6 +180,25 @@ export const useStore = create<StoreType>((set, get) => ({
 }))
 ```
 
+### React Query Integration
+React Query is implemented for server state management:
+```typescript
+// Query usage
+const { data, isLoading, error } = useQuery({
+  queryKey: ['entity', 'list'],
+  queryFn: () => service.getList()
+})
+
+// Mutation usage
+const mutation = useMutation({
+  mutationFn: service.create,
+  onSuccess: () => queryClient.invalidateQueries(['entity'])
+})
+```
+- **Query Keys**: Structured as `['entity', 'operation', ...params]`
+- **Cache Management**: Automatic invalidation on mutations
+- **Error Handling**: Integrated with existing error boundaries
+
 ### Settings Dropdown Behavior
 - **Theme Toggle**: Keeps dropdown open (state-only change)
 - **Logout**: Closes dropdown before navigation
@@ -191,9 +216,12 @@ User → Collection → CardRecord → Card/Parallel
 
 ## Common Issues & Solutions
 
-### TypeScript Errors
-- Use `import type` for type-only imports due to verbatimModuleSyntax setting
-- Use `number` instead of `NodeJS.Timeout` for timer return types
+### TypeScript Configuration
+- **Strict Mode**: Enabled with comprehensive type checking
+- **Import Style**: Use `import type` for type-only imports due to `verbatimModuleSyntax: true` setting
+- **Timer Types**: Use `number` instead of `NodeJS.Timeout` for timer return types
+- **Module Resolution**: Uses bundler mode with ESNext modules
+- **No Emit**: TypeScript used only for type checking; Vite handles compilation
 
 ### Theme System
 - Themes are controlled by `data-theme` attribute on document element
@@ -206,6 +234,14 @@ User → Collection → CardRecord → Card/Parallel
 - Global 401 handling via `apiRequest()` wrapper in utils/api.ts
 - Protected routes redirect to login if not authenticated
 - Background token refresh checks every hour for tokens expiring within 2 hours
+
+### API Request Wrapper
+The `apiRequest()` utility in `utils/api.ts` provides:
+- **Automatic Token Management**: Adds Bearer tokens to requests
+- **Token Refresh**: Proactive refresh for tokens expiring within 60 minutes
+- **Global 401 Handling**: Automatic logout and redirect on auth failures
+- **Content-Type Handling**: Automatically sets JSON headers (except for FormData)
+- **Error Propagation**: Consistent error handling across all API calls
 
 ### CSS/Styling
 - Use semantic CSS classes defined in index.css
@@ -246,12 +282,13 @@ User → Collection → CardRecord → Card/Parallel
 - **No ID Columns**: User-facing tables hide database IDs for cleaner presentation
 
 ### Import System Architecture
-- **Multi-Format Support**: CSV, HTML (converts to PDF), and JSON upload options
+- **Multi-Format Support**: CSV, HTML (converts to PDF), PDF, Image, Multiple PDF batch, and JSON upload options
 - **Gemini Processing**: All file types processed through Gemini for data extraction
 - **Stage-Resolve-Commit Workflow**: Three-phase import with name resolution step
 - **Player/Team Resolution**: Candidate matching with create-if-missing options
 - **Batch Management**: Track import progress and allow incremental resolution
 - **Release Date Support**: Upload forms include optional release_date field for sets
+- **Multiple File Support**: Batch processing for multiple PDF files in single workflow
 - **Backend Optimizations (2024)**: Improved parallel processing efficiency with backward compatibility
 
 ### Authentication Enhancements (2024)
@@ -273,3 +310,4 @@ User → Collection → CardRecord → Card/Parallel
 - **Enhanced CardEdit Schema**: Supports both `parallels` (current) and `parallel_names` (optimized) formats
 - **Improved Efficiency**: Backend now processes parallels more efficiently while maintaining API compatibility
 - **Release Date Support**: Backend now accepts `release_date` parameter in upload endpoints
+- Remember that you are a frontend engineer. Your focus should be on implementing a usable and maintainable frontend. If you have anything that needs to be implemented on the backend. just request it from the backend and they will get it done for you.

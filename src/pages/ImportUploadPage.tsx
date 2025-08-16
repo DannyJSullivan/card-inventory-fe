@@ -451,8 +451,7 @@ export const ImportUploadPage = () => {
                 </div>
               )}
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
-                {/* Upload & Preview Button */}
+              <div className="flex gap-4 flex-wrap">
                 <button
                   className="dashboard-card-button"
                   style={{ background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-hover))', width: 'auto', padding: '12px 26px', fontSize: '13px' }}
@@ -462,17 +461,7 @@ export const ImportUploadPage = () => {
                   {uploadFileMutation.isPending || uploadJsonMutation.isPending ? getLoadingMessage() : 'Upload & Preview'}
                 </button>
                 
-                {/* Vertical separator when preview exists */}
-                {preview && (
-                  <div style={{
-                    width: '1px',
-                    height: '32px',
-                    backgroundColor: 'var(--border-primary)',
-                    margin: '0 8px'
-                  }} />
-                )}
-                
-                {/* Copy JSON and Stage buttons when preview exists and in JSON mode */}
+                {/* Show Copy JSON and Stage buttons when preview exists and in JSON mode */}
                 {preview && isJson && (
                   <>
                     <button
@@ -491,15 +480,6 @@ export const ImportUploadPage = () => {
                     >
                       {copyState === 'copied' ? 'Copied!' : 'Copy JSON'}
                     </button>
-                    
-                    {/* Separator between Copy JSON and Stage */}
-                    <div style={{
-                      width: '1px',
-                      height: '32px',
-                      backgroundColor: 'var(--border-primary)',
-                      margin: '0 8px'
-                    }} />
-                    
                     <button
                       type="button"
                       onClick={handleStage}

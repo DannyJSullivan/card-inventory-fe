@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { importService } from '../services/imports'
 import { useImportResolutionStore } from '../stores/importResolution'
-import type { CardRow, CardEditPayload, ImportPlayerRef, ImportParallelRef, CardTypeInfo } from '../types/imports'
+import type { CardRow, CardEditPayload, ImportPlayerRef, CardTypeInfo, Candidate } from '../types/imports'
 import { AppNavbar } from '../components/ui/AppNavbar'
 import { Pagination } from '../components/ui/Pagination'
 import '../components/CardEditModal.css'
@@ -14,234 +14,12 @@ const formatScore = (score: number): string => {
   return parseFloat(score.toFixed(2)).toString()
 }
 
-// Merge Cards Modal Component
-interface MergeCardsModalProps {
-  selectedCardIds: number[]
-  selectedCards: CardRow[]
-  onClose: () => void
-  onMerge: (request: any) => void
-  isPending: boolean
-}
-
-const MergeCardsModal = ({ selectedCardIds, selectedCards, onClose, onMerge, isPending }: MergeCardsModalProps) => {
-  const [targetCardId, setTargetCardId] = useState<number>(selectedCardIds[0] || 0)
-  const [mergedCardNumber, setMergedCardNumber] = useState('')
-  const [mergedTitle, setMergedTitle] = useState('')
-
-  useEffect(() => {
-    const originalStyle = window.getComputedStyle(document.body).overflow
-    document.body.style.overflow = 'hidden'
-    
-    return () => {
-      document.body.style.overflow = originalStyle
-    }
-  }, [])
-
-  const handleMerge = () => {
-    const sourceCardIds = selectedCardIds.filter(id => id !== targetCardId)
-    
-    // Collect all unique players from all selected cards
-    const allPlayersMap = new Map<string, any>()
-    selectedCards.forEach(card => {
-      card.data.players?.forEach(player => {
-        const key = `${player.name}|${player.team_name}`
-        allPlayersMap.set(key, player)
-      })
-    })
-    
-    const allPlayers = Array.from(allPlayersMap.values())
-    
-    const request = {
-      target_row_id: targetCardId,
-      source_row_ids: sourceCardIds,
-      merged_card_data: {
-        card_number: mergedCardNumber || `merged-${targetCardId}`, // card_number is required
-        ...(mergedTitle && { title: mergedTitle }),
-        players: allPlayers // Include all players from selected cards
-      }
-    }
-    
-    onMerge(request)
+// Helper: format parallel name with print run (e.g., "Sky Blue /499")
+const formatParallelName = (name: string, printRun?: number | null): string => {
+  if (printRun) {
+    return `${name} /${printRun}`
   }
-
-  return (
-    <div className="card-edit-modal-backdrop" onClick={onClose}>
-      <div className="card-edit-modal-container" onClick={(e) => e.stopPropagation()}>
-        <div className="card-edit-modal-header">
-          <h2 className="card-edit-modal-title">🔗 Merge Cards</h2>
-          <button onClick={onClose} className="card-edit-modal-close-button">✕</button>
-        </div>
-
-        <div className="card-edit-modal-content">
-          <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
-            Merge {selectedCardIds.length} cards into a single card. All players and teams will be combined.
-          </p>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label className="card-edit-modal-label">Target Card (keep this one)</label>
-            <select
-              value={targetCardId}
-              onChange={(e) => setTargetCardId(Number(e.target.value))}
-              className="card-edit-modal-input"
-            >
-              {selectedCardIds.map(id => (
-                <option key={id} value={id}>Card ID: {id}</option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label className="card-edit-modal-label">Merged Card Number (required)</label>
-            <input
-              type="text"
-              value={mergedCardNumber}
-              onChange={(e) => setMergedCardNumber(e.target.value)}
-              className="card-edit-modal-input"
-              placeholder="Enter card number for merged card"
-              required
-            />
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label className="card-edit-modal-label">Merged Title (optional)</label>
-            <input
-              type="text"
-              value={mergedTitle}
-              onChange={(e) => setMergedTitle(e.target.value)}
-              className="card-edit-modal-input"
-              placeholder="Leave blank to keep target card title"
-            />
-          </div>
-        </div>
-
-        <div className="card-edit-modal-footer">
-          <button
-            onClick={onClose}
-            className="card-edit-modal-cancel-button"
-            disabled={isPending}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleMerge}
-            className="card-edit-modal-save-button"
-            disabled={isPending || !mergedCardNumber.trim()}
-          >
-            {isPending ? 'Merging...' : '🔗 Merge Cards'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Split Card Modal Component
-interface SplitCardModalProps {
-  cardRow: CardRow
-  onClose: () => void
-  onSplit: (request: any) => void
-  isPending: boolean
-}
-
-const SplitCardModal = ({ cardRow, onClose, onSplit, isPending }: SplitCardModalProps) => {
-  const [splitCards, setSplitCards] = useState(() => {
-    return cardRow.data.players?.map((player, idx) => ({
-      card_number: `${cardRow.data.card_number || cardRow.row_index}${String.fromCharCode(97 + idx)}`, // 1a, 1b, etc
-      players: [player],
-      inherit_attributes: true
-    })) || []
-  })
-
-  useEffect(() => {
-    const originalStyle = window.getComputedStyle(document.body).overflow
-    document.body.style.overflow = 'hidden'
-    
-    return () => {
-      document.body.style.overflow = originalStyle
-    }
-  }, [])
-
-  const handleSplit = () => {
-    const request = {
-      source_row_id: cardRow.row_id,
-      split_cards: splitCards
-    }
-    
-    onSplit(request)
-  }
-
-  const updateSplitCard = (index: number, field: string, value: any) => {
-    setSplitCards(prev => {
-      const updated = [...prev]
-      updated[index] = { ...updated[index], [field]: value }
-      return updated
-    })
-  }
-
-  return (
-    <div className="card-edit-modal-backdrop" onClick={onClose}>
-      <div className="card-edit-modal-container" onClick={(e) => e.stopPropagation()}>
-        <div className="card-edit-modal-header">
-          <h2 className="card-edit-modal-title">✂️ Split Card</h2>
-          <button onClick={onClose} className="card-edit-modal-close-button">✕</button>
-        </div>
-
-        <div className="card-edit-modal-content">
-          <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
-            Split "{cardRow.data.title || cardRow.data.card_number}" into {splitCards.length} separate cards.
-          </p>
-
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            {splitCards.map((splitCard, index) => (
-              <div key={index} style={{
-                padding: '12px',
-                marginBottom: '12px',
-                backgroundColor: 'var(--bg-tertiary)',
-                borderRadius: '8px',
-                border: '1px solid var(--border-primary)'
-              }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600' }}>
-                  Card {index + 1}: {splitCard.players[0]?.name || 'Unknown'}
-                </h4>
-                
-                <div style={{ marginBottom: '12px' }}>
-                  <label className="card-edit-modal-label">Card Number</label>
-                  <input
-                    type="text"
-                    value={splitCard.card_number}
-                    onChange={(e) => updateSplitCard(index, 'card_number', e.target.value)}
-                    className="card-edit-modal-input"
-                  />
-                </div>
-
-
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Player: {splitCard.players[0]?.name} ({splitCard.players[0]?.team_name})
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card-edit-modal-footer">
-          <button
-            onClick={onClose}
-            className="card-edit-modal-cancel-button"
-            disabled={isPending}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSplit}
-            className="card-edit-modal-save-button"
-            disabled={isPending || splitCards.length === 0}
-          >
-            {isPending ? 'Splitting...' : '✂️ Split Card'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  return name
 }
 
 
@@ -769,16 +547,19 @@ const CardEditModal = ({ row, groups, onClose, existingEdit, saveEdit, allRows }
 }
 
 // Parallel Edit Modal
-interface ParallelModalProps {
-  cardType: string
-  parallels: ImportParallelRef[]
-  onSave: (parallels: ImportParallelRef[]) => void
-  onClose: () => void
-}
 
-const ParallelEditModal = ({ cardType, parallels, onSave, onClose }: ParallelModalProps) => {
-  const [localParallels, setLocalParallels] = useState<ImportParallelRef[]>(parallels)
-
+const ParallelResolutionModal = ({ cardType, groups, onSave, onClose }: { cardType: string; groups: any; onSave: () => void; onClose: () => void }) => {
+  const { parallels, select, clear } = useImportResolutionStore()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState<Candidate[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchingFor, setSearchingFor] = useState<string | null>(null)
+  
+  // Editing state for creating new parallels
+  const [editingParallel, setEditingParallel] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPrintRun, setEditPrintRun] = useState<string>('')
+  
   // Lock body scroll when modal is open
   useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow
@@ -789,42 +570,96 @@ const ParallelEditModal = ({ cardType, parallels, onSave, onClose }: ParallelMod
     }
   }, [])
 
+  // Get parallels for this specific card type
+  const cardTypeParallels = Object.values(parallels).filter(p => p.cardType === cardType)
+  const candidates = groups?.parallel_candidates?.[cardType] || []
+  
+  // Get the original parallel data with print runs from groups
+  const originalParallels = groups?.parallel_groups?.[cardType] || []
+  
+
+  // Search functionality
+  const performSearch = async (query: string, printRun?: number | null) => {
+    if (!query.trim()) {
+      setSearchResults([])
+      return
+    }
+    
+    setIsSearching(true)
+    setSearchingFor(query)
+    try {
+      const results = await importService.searchParallelCandidates(query, printRun)
+      setSearchResults(results)
+    } catch (error) {
+      console.error('Search failed:', error)
+      setSearchResults([])
+    } finally {
+      setIsSearching(false)
+      setSearchingFor(null)
+    }
+  }
+
+  // Debounced search
   useEffect(() => {
-    setLocalParallels(parallels)
-  }, [parallels])
+    const timeoutId = setTimeout(() => {
+      if (searchTerm) {
+        performSearch(searchTerm)
+      } else {
+        setSearchResults([])
+      }
+    }, 300)
 
-  const addParallel = () => {
-    const newParallel = { name: '', print_run: null, original_print_run_text: null }
-    setLocalParallels([...localParallels, newParallel])
-  }
-
-  const updateParallel = (index: number, field: keyof ImportParallelRef, value: any) => {
-    const updated = [...localParallels]
-    updated[index] = { ...updated[index], [field]: value }
-    setLocalParallels(updated)
-  }
-
-  const removeParallel = (index: number) => {
-    setLocalParallels(localParallels.filter((_, i) => i !== index))
-  }
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm])
 
   const handleSave = () => {
-    onSave(localParallels)
+    onSave()
     onClose()
   }
 
   const handleCancel = () => {
-    setLocalParallels(parallels)
     onClose()
   }
 
+  // Editing functions for creating new parallels
+  const startEditing = (parallelKey: string, originalName: string, originalPrintRun?: number | null) => {
+    setEditingParallel(parallelKey)
+    setEditName(originalName)
+    setEditPrintRun(originalPrintRun ? String(originalPrintRun) : '')
+  }
+
+  const cancelEditing = () => {
+    setEditingParallel(null)
+    setEditName('')
+    setEditPrintRun('')
+  }
+
+  const saveEditing = (parallelKey: string, parallelName: string) => {
+    const finalName = editName.trim() || parallelName
+    const finalPrintRun = editPrintRun.trim() ? parseInt(editPrintRun) : null
+    const formattedName = formatParallelName(finalName, finalPrintRun)
+    
+    select('parallel', parallelKey, {
+      kind: 'parallel',
+      cardType,
+      parallelName,
+      create: formattedName
+    })
+    
+    cancelEditing()
+  }
+
   return (
-    <div className="card-edit-modal-backdrop">
-      <div className="card-edit-modal-container">
+    <div className="card-edit-modal-backdrop" onClick={(e) => {
+      if (e.target === e.currentTarget) {
+        handleCancel()
+      }
+    }}>
+      <div className="card-edit-modal-container" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="card-edit-modal-header">
           <h2 className="card-edit-modal-title">
-            ⚡ Edit Parallels - {cardType}
+            🎯 Resolve Parallels - {cardType}
           </h2>
           <button
             onClick={handleCancel}
@@ -838,45 +673,304 @@ const ParallelEditModal = ({ cardType, parallels, onSave, onClose }: ParallelMod
         <div className="card-edit-modal-content">
           <div className="mb-6">
             <p className="text-sm text-gray-400 mb-4">
-              Parallels defined here will be applied to all cards of type "{cardType}". 
-              Common examples: Refractor, Gold, Prizm, etc.
+              Resolve each parallel for "{cardType}" to existing parallel types or create new ones.
             </p>
             
-            <button
-              onClick={addParallel}
-              className="card-edit-modal-add-button card-edit-modal-add-parallel"
-            >
-              + Add Parallel
-            </button>
+            {/* Search Input */}
+            <div style={{ marginBottom: '16px' }}>
+              <input
+                type="text"
+                placeholder="🔍 Search for parallel types (e.g., Refractor, Gold, etc.)"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-secondary)',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px'
+                }}
+              />
+              {isSearching && (
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Searching for "{searchingFor}"...
+                </div>
+              )}
+            </div>
+
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <div style={{
+                marginBottom: '16px',
+                padding: '12px',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '6px',
+                border: '1px solid var(--border-primary)'
+              }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 8px 0', color: 'var(--text-primary)' }}>
+                  Search Results (click to apply to the first unresolved parallel):
+                </h4>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {searchResults.map((result, index) => {
+                    // Temporary: Backend may not have print_run field yet, so fallback to matching original
+                    const matchingOriginal = originalParallels.find((op: any) => op.name === result.name)
+                    const printRun = result.print_run || matchingOriginal?.print_run || null
+                    const resultName = formatParallelName(result.name, printRun)
+                    
+                    return (
+                      <button
+                        key={`search-${result.id}-${index}-${result.name}`}
+                        onClick={() => {
+                          // For search results, we'll apply to the first unresolved parallel
+                          const firstUnresolved = cardTypeParallels.find(p => !p.selection)
+                          if (firstUnresolved) {
+                            select('parallel', firstUnresolved.key, {
+                              kind: 'parallel',
+                              cardType,
+                              parallelName: firstUnresolved.parallelName,
+                              existingId: result.id,
+                              canonical: resultName
+                            })
+                            // Clear search to show the resolution
+                            setSearchTerm('')
+                            setSearchResults([])
+                          }
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          border: '1px solid var(--border-secondary)',
+                          backgroundColor: 'var(--button-bg)',
+                          color: 'var(--text-tertiary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {resultName} <span style={{ opacity: 0.7 }}>({formatScore(result.score)})</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                  Or scroll down to apply to a specific parallel manually.
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="card-edit-modal-player-list" style={{ maxHeight: '300px' }}>
-            {localParallels.map((parallel, index) => (
-              <div key={index} className="card-edit-modal-parallel-row">
-                <input
-                  placeholder="Parallel name (e.g., Refractor, Gold)"
-                  value={parallel.name}
-                  onChange={(e) => updateParallel(index, 'name', e.target.value)}
-                  className="card-edit-modal-player-input card-edit-modal-parallel-name"
-                />
-                <input
-                  type="number"
-                  placeholder="Print run (optional)"
-                  value={parallel.print_run || ''}
-                  onChange={(e) => updateParallel(index, 'print_run', e.target.value ? parseInt(e.target.value) : null)}
-                  className="card-edit-modal-player-input card-edit-modal-parallel-print-run"
-                />
-                <button
-                  onClick={() => removeParallel(index)}
-                  className="card-edit-modal-remove-button"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            {localParallels.length === 0 && (
+          <div className="card-edit-modal-player-list" style={{ maxHeight: '400px' }}>
+            {cardTypeParallels.map((parallel) => {
+              const resolved = !!parallel.selection
+              
+              // Find the original parallel data to get print run
+              const originalParallel = originalParallels.find((op: any) => op.name === parallel.parallelName)
+              const printRun = originalParallel?.print_run
+              
+              return (
+                <div key={parallel.key} style={{
+                  padding: '16px',
+                  marginBottom: '12px',
+                  backgroundColor: 'var(--bg-card)',
+                  borderRadius: '8px',
+                  border: `1px solid ${resolved ? 'var(--accent-success)' : 'var(--border-secondary)'}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    <div>
+                      <h4 style={{ 
+                        fontSize: '16px', 
+                        fontWeight: '600', 
+                        margin: '0 0 4px 0',
+                        color: 'var(--text-primary)'
+                      }}>
+                        {formatParallelName(parallel.parallelName, printRun)}
+                      </h4>
+                      {resolved && parallel.selection && (
+                        <span style={{ 
+                          fontSize: '12px',
+                          color: 'var(--accent-success)',
+                          fontWeight: '500'
+                        }}>
+                          ✅ Resolved to: {'existingId' in parallel.selection ? parallel.selection.canonical : parallel.selection.create}
+                        </span>
+                      )}
+                    </div>
+                    {resolved && (
+                      <button
+                        onClick={() => clear('parallel', parallel.key)}
+                        style={{
+                          fontSize: '11px',
+                          padding: '4px 8px',
+                          backgroundColor: 'var(--button-bg)',
+                          color: 'var(--text-tertiary)',
+                          border: '1px solid var(--border-secondary)',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {!resolved && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {candidates
+                          .sort((a: Candidate, b: Candidate) => b.score - a.score) // Sort by highest score first
+                          .map((candidate: Candidate, index: number) => {
+                            // Temporary: Get print run from original parallels until backend fully implements print_run field
+                            const matchingOriginal = originalParallels.find((op: any) => op.name === candidate.name)
+                            const printRun = candidate.print_run || matchingOriginal?.print_run || null
+                            const candidateName = formatParallelName(candidate.name, printRun)
+                            
+                            return (
+                              <button
+                                key={`${candidate.id}-${index}-${parallel.key}`}
+                                onClick={() => select('parallel', parallel.key, {
+                                  kind: 'parallel',
+                                  cardType,
+                                  parallelName: parallel.parallelName,
+                                  existingId: candidate.id,
+                                  canonical: candidateName
+                                })}
+                                style={{
+                                  padding: '6px 12px',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  border: '1px solid var(--border-secondary)',
+                                  backgroundColor: 'var(--button-bg)',
+                                  color: 'var(--text-tertiary)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {candidateName} <span style={{ opacity: 0.7 }}>({formatScore(candidate.score)})</span>
+                              </button>
+                            )
+                          })}
+                        {candidates.length === 0 && (
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                            No matching parallel types found
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button
+                          onClick={() => {
+                            // Search for better matches with print run
+                            performSearch(parallel.parallelName, printRun)
+                            setSearchTerm(parallel.parallelName)
+                          }}
+                          style={{
+                            fontSize: '11px',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            backgroundColor: 'var(--accent-info)',
+                            color: 'white',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                        >
+                          🔍 Search Better Matches
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {editingParallel === parallel.key ? (
+                          // Editing form
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <input
+                                type="text"
+                                placeholder="Parallel name"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                style={{
+                                  flex: 1,
+                                  padding: '6px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-secondary)',
+                                  backgroundColor: 'var(--bg-card)',
+                                  color: 'var(--text-primary)',
+                                  fontSize: '12px'
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Print run"
+                                value={editPrintRun}
+                                onChange={(e) => setEditPrintRun(e.target.value)}
+                                style={{
+                                  width: '80px',
+                                  padding: '6px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-secondary)',
+                                  backgroundColor: 'var(--bg-card)',
+                                  color: 'var(--text-primary)',
+                                  fontSize: '12px'
+                                }}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                onClick={() => saveEditing(parallel.key, parallel.parallelName)}
+                                style={{
+                                  fontSize: '11px',
+                                  padding: '6px 12px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#22c55e',
+                                  color: 'white',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: '500'
+                                }}
+                              >
+                                ✅ Save
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                style={{
+                                  fontSize: '11px',
+                                  padding: '6px 12px',
+                                  borderRadius: '4px',
+                                  backgroundColor: 'var(--button-bg)',
+                                  color: 'var(--text-tertiary)',
+                                  border: '1px solid var(--border-secondary)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          // Create New button
+                          <button
+                            onClick={() => startEditing(parallel.key, parallel.parallelName, printRun)}
+                            style={{
+                              fontSize: '12px',
+                              padding: '8px 16px',
+                              borderRadius: '6px',
+                              backgroundColor: '#2563eb',
+                              color: 'white',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            🆕 Create New "{formatParallelName(parallel.parallelName, printRun)}"
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {cardTypeParallels.length === 0 && (
               <div className="card-edit-modal-empty-state">
-                No parallels defined for this card type
+                No parallels found for this card type
               </div>
             )}
           </div>
@@ -894,7 +988,7 @@ const ParallelEditModal = ({ cardType, parallels, onSave, onClose }: ParallelMod
             onClick={handleSave}
             className="card-edit-modal-save-button"
           >
-            ⚡ Save Parallels
+            💾 Save Progress
           </button>
         </div>
       </div>
@@ -912,17 +1006,7 @@ interface CardTypeSectionProps {
   cardEdits: Record<number, CardEditPayload>
   isCollapsed: boolean
   onToggleCollapse: () => void
-  // Bulk selection props
-  selectedCards: Set<number>
-  onCardSelect: (rowId: number, checked: boolean, cardRow?: CardRow) => void
-  onSelectAll: (rows: CardRow[], checked: boolean) => void
-  onBulkToggle: (field: 'is_rookie' | 'is_first' | 'is_autograph', value: boolean) => void
-  onMergeCards: () => void
-  onSplitCard: (row: CardRow) => void
-  bulkEditPending: boolean
-  mergeCardsPending: boolean
-  onDeleteSection: (cardType: string) => void
-  deleteSectionPending: boolean
+  onSaveResolutions: () => Promise<void>
 }
 
 const CardTypeSection = ({ 
@@ -934,16 +1018,7 @@ const CardTypeSection = ({
   cardEdits,
   isCollapsed,
   onToggleCollapse,
-  selectedCards,
-  onCardSelect,
-  onSelectAll,
-  onBulkToggle,
-  onMergeCards,
-  onSplitCard,
-  bulkEditPending,
-  mergeCardsPending,
-  onDeleteSection,
-  deleteSectionPending
+  onSaveResolutions
 }: CardTypeSectionProps) => {
   const cardType = cardTypeInfo.card_type || 'Unknown Card Type'
   const [page, setPage] = useState(1)
@@ -999,8 +1074,17 @@ const CardTypeSection = ({
     })
   }
 
-  const approveAllInSection = () => {
+  const approveAllInSection = async () => {
+    // First, approve all rows locally
     rows.forEach(row => approveCardRow(row))
+    
+    // Then save the changes to the database
+    try {
+      await onSaveResolutions()
+    } catch (error) {
+      console.error('Failed to save approvals:', error)
+      // Error will be shown in the UI via the mutation's error state
+    }
   }
 
   const autoResolveSection = () => {
@@ -1090,21 +1174,16 @@ const CardTypeSection = ({
   return (
     <div className={`collapsible-card ${!isCollapsed ? 'open' : ''}`}>
       <div className="collapsible-card-header">
-        <div className="collapsible-card-left" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-          {/* Top row: Toggle button + Title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <button
-              onClick={onToggleCollapse}
-              className="collapsible-card-toggle"
-              aria-expanded={!isCollapsed}
-            >
-              <span className="collapsible-card-toggle-icon">▸</span>
-            </button>
+        <div className="collapsible-card-left">
+          <button
+            onClick={onToggleCollapse}
+            className="collapsible-card-toggle"
+            aria-expanded={!isCollapsed}
+          >
+            <span className="collapsible-card-toggle-icon">▸</span>
+          </button>
+          <div className="collapsible-card-title-row">
             <h2 className="collapsible-card-title">{cardType}</h2>
-          </div>
-          
-          {/* Bottom row: Status badges */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: '32px' }}>
             <span className="collapsible-card-badge">
               {cardTypeInfo.total_cards || 0} cards
             </span>
@@ -1123,8 +1202,7 @@ const CardTypeSection = ({
             </span>
           </div>
         </div>
-        
-        <div className="collapsible-card-actions" style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+        <div className="collapsible-card-actions">
           <button
             onClick={() => onParallelEdit(cardType)}
             className="dashboard-card-button small gradient-indigo"
@@ -1145,19 +1223,6 @@ const CardTypeSection = ({
             disabled={rows.length === 0}
           >
             ✓ Approve All
-          </button>
-          <button
-            onClick={() => onDeleteSection(cardType)}
-            className="dashboard-card-button small"
-            disabled={deleteSectionPending}
-            title="Delete all cards in this section"
-            style={{ 
-              backgroundColor: '#dc2626',
-              borderColor: '#dc2626',
-              color: 'white'
-            }}
-          >
-            {deleteSectionPending ? 'Deleting...' : '🗑️ Delete Section'}
           </button>
         </div>
       </div>
@@ -1205,90 +1270,12 @@ const CardTypeSection = ({
               )}
             </div>
 
-            {/* Bulk Actions Toolbar */}
-            {selectedCards.size > 0 && (
-              <div style={{
-                padding: '12px',
-                backgroundColor: 'var(--bg-tertiary)',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                flexWrap: 'wrap'
-              }}>
-                <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>
-                  {selectedCards.size} card{selectedCards.size !== 1 ? 's' : ''} selected
-                </span>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => onBulkToggle('is_rookie', true)}
-                    className="btn-small btn-edit"
-                    disabled={bulkEditPending}
-                  >
-                    🌟 Mark Rookie
-                  </button>
-                  <button
-                    onClick={() => onBulkToggle('is_rookie', false)}
-                    className="btn-small btn-edit"
-                    disabled={bulkEditPending}
-                  >
-                    ❌ Unmark Rookie
-                  </button>
-                  <button
-                    onClick={() => onBulkToggle('is_first', true)}
-                    className="btn-small btn-edit"
-                    disabled={bulkEditPending}
-                  >
-                    🥇 Mark First
-                  </button>
-                  <button
-                    onClick={() => onBulkToggle('is_first', false)}
-                    className="btn-small btn-edit"
-                    disabled={bulkEditPending}
-                  >
-                    ❌ Unmark First
-                  </button>
-                  <button
-                    onClick={() => onBulkToggle('is_autograph', true)}
-                    className="btn-small btn-edit"
-                    disabled={bulkEditPending}
-                  >
-                    ✍️ Mark Auto
-                  </button>
-                  <button
-                    onClick={() => onBulkToggle('is_autograph', false)}
-                    className="btn-small btn-edit"
-                    disabled={bulkEditPending}
-                  >
-                    ❌ Unmark Auto
-                  </button>
-                  <button
-                    onClick={onMergeCards}
-                    className="btn-small btn-edit"
-                    disabled={selectedCards.size < 2 || mergeCardsPending}
-                    style={{ backgroundColor: '#3b82f6' }}
-                  >
-                    🔗 Merge Cards
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Cards Table */}
             {rows.length > 0 ? (
               <div className="admin-table-container">
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>
-                        <input
-                          type="checkbox"
-                          checked={rows.length > 0 && rows.every(row => selectedCards.has(row.row_id))}
-                          onChange={(e) => onSelectAll(rows, e.target.checked)}
-                          style={{ cursor: 'pointer' }}
-                        />
-                      </th>
                       <th>Card #</th>
                       <th>Player(s)</th>
                       <th>Team(s)</th>
@@ -1319,14 +1306,6 @@ const CardTypeSection = ({
                       
                       return (
                         <tr key={row.row_id} className={cardEdits[row.row_id] ? 'edited-row' : ''}>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={selectedCards.has(row.row_id)}
-                              onChange={(e) => onCardSelect(row.row_id, e.target.checked, row)}
-                              style={{ cursor: 'pointer' }}
-                            />
-                          </td>
                           <td>
                             <div style={{ fontWeight: '500' }}>
                               {base.card_number || row.row_index}
@@ -1432,16 +1411,6 @@ const CardTypeSection = ({
                               >
                                 Edit
                               </button>
-                              {(base.players?.length || 0) > 1 && (
-                                <button
-                                  onClick={() => onSplitCard(row)}
-                                  className="btn-small btn-edit"
-                                  title="Split multi-player card into separate cards"
-                                  style={{ backgroundColor: '#f59e0b' }}
-                                >
-                                  ✂️ Split
-                                </button>
-                              )}
                             </div>
                           </td>
                         </tr>
@@ -1485,19 +1454,9 @@ export const ImportResolvePage = () => {
   const idNum = Number(batchId)
   const { initialize, unresolvedCount, buildResolveRequest, setErrors, unresolvedByKind, cardEdits, setCardEdit, removeCardEdit } = useImportResolutionStore()
   const [activeRow, setActiveRow] = useState<CardRow | null>(null)
-  const [cardTypeParallels, setCardTypeParallels] = useState<Record<string, ImportParallelRef[]>>({})
   const [parallelModalCardType, setParallelModalCardType] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  
-  // Multi-select state
-  const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set())
-  const [selectedCardsData, setSelectedCardsData] = useState<CardRow[]>([])
-  const [showMergeModal, setShowMergeModal] = useState(false)
-  const [showSplitModal, setShowSplitModal] = useState(false)
-  const [splitCardRow, setSplitCardRow] = useState<CardRow | null>(null)
-  const [showDeleteSectionConfirm, setShowDeleteSectionConfirm] = useState(false)
-  const [deleteSectionCardType, setDeleteSectionCardType] = useState<string | null>(null)
 
   // Get the preview groups for metadata and candidates
   const groupsQuery = useQuery({ 
@@ -1523,66 +1482,70 @@ export const ImportResolvePage = () => {
 
   useEffect(() => {
     if (groupsQuery.data) {
-      initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names)
+      // Extract parallels from parallel_groups if available
+      const parallels: { cardType: string; parallelName: string }[] = []
+      
+      console.log('Groups data:', groupsQuery.data)
+      
+      if ('parallel_groups' in groupsQuery.data && groupsQuery.data.parallel_groups) {
+        console.log('Found parallel_groups:', groupsQuery.data.parallel_groups)
+        Object.entries(groupsQuery.data.parallel_groups).forEach(([cardType, parallelList]) => {
+          (parallelList as any[]).forEach((parallel: any) => {
+            parallels.push({ cardType, parallelName: parallel.name })
+          })
+        })
+      } else {
+        console.log('No parallel_groups found in data')
+      }
+      
+      console.log('Initializing with parallels:', parallels)
+      initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names, parallels)
     }
   }, [groupsQuery.data, idNum, initialize])
 
   // Initialize card type parallels from the new card types endpoint
   useEffect(() => {
     if (cardTypesQuery.data?.card_types) {
-      const initialParallels: Record<string, ImportParallelRef[]> = {}
+      // Extract parallels for resolution if not already initialized
+      const parallelsForResolution: { cardType: string; parallelName: string }[] = []
+      
       cardTypesQuery.data.card_types.forEach((ct: CardTypeInfo) => {
-        initialParallels[ct.card_type] = ct.parallels || []
+        // Extract parallels for the resolution store if we haven't already
+        if (ct.parallels && ct.parallels.length > 0) {
+          ct.parallels.forEach(parallel => {
+            parallelsForResolution.push({ cardType: ct.card_type, parallelName: parallel.name })
+          })
+        }
       })
-      setCardTypeParallels(initialParallels)
+      
+      // If we have parallels from card types but haven't initialized them yet, do so now
+      const store = useImportResolutionStore.getState()
+      const hasParallels = Object.keys(store.parallels).length > 0
+      if (parallelsForResolution.length > 0 && !hasParallels) {
+        console.log('Initializing parallels from card types endpoint:', parallelsForResolution)
+        // Re-initialize with the parallels from card types
+        const groups = groupsQuery.data
+        if (groups) {
+          initialize(idNum, groups.player_names, groups.team_names, parallelsForResolution)
+        }
+      }
     }
-  }, [cardTypesQuery.data])
-
-  // Legacy fallback for groups data
-  useEffect(() => {
-    const g: any = groupsQuery.data
-    if (!g || cardTypesQuery.data) return // Skip if we have card types data
-    
-    if (Array.isArray(g.card_types) && g.card_types.length > 0) {
-      const initialParallels: Record<string, ImportParallelRef[]> = {}
-      g.card_types.forEach((ct: any) => {
-        if (!ct?.name || !Array.isArray(ct?.parallels)) return
-        initialParallels[ct.name] = ct.parallels.map((p: any) => ({
-          name: p.name,
-          print_run: p.print_run ?? null,
-          original_print_run_text: p.original_print_run_text ?? null,
-          odds: p.odds ?? null,
-        }))
-      })
-      setCardTypeParallels(initialParallels)
-      return
-    }
-    if (g?.parallels_by_card_type) {
-      const initialParallels: Record<string, ImportParallelRef[]> = {}
-      Object.entries(g.parallels_by_card_type as Record<string, any[]>).forEach(([cardType, parallelInfos]) => {
-        initialParallels[cardType] = (parallelInfos || []).map((info: any) => ({
-          name: info.name,
-          print_run: info.print_run ?? null,
-          original_print_run_text: info.original_print_run_text ?? null,
-          odds: info.odds ?? null,
-        }))
-      })
-      setCardTypeParallels(initialParallels)
-    }
-  }, [groupsQuery.data, cardTypesQuery.data])
+  }, [cardTypesQuery.data, groupsQuery.data, idNum, initialize])
 
   const resolveMutation = useMutation({
     mutationFn: async () => { 
       const body = buildResolveRequest()
-      if (!body.players && !body.teams && !body.card_edits) throw new Error('No pending changes')
+      if (!body.players && !body.teams && !body.parallels && !body.card_edits) throw new Error('No pending changes')
       return importService.resolve(idNum, body) 
     },
     onSuccess: () => { 
-      const { players, teams } = useImportResolutionStore.getState()
+      const { players, teams, parallels } = useImportResolutionStore.getState()
       const dirtyPlayers = Object.values(players).filter(p=>p.dirty).map(p=>p.raw)
       const dirtyTeams = Object.values(teams).filter(t=>t.dirty).map(t=>t.raw)
+      const dirtyParallels = Object.values(parallels).filter(p=>p.dirty).map(p=>p.key)
       useImportResolutionStore.getState().markClean('player', dirtyPlayers)
       useImportResolutionStore.getState().markClean('team', dirtyTeams)
+      useImportResolutionStore.getState().markClean('parallel', dirtyParallels)
       // Invalidate all row queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'] })
     }
@@ -1602,80 +1565,6 @@ export const ImportResolvePage = () => {
         setErrors('team', names) 
       } 
       alert(msg) 
-    }
-  })
-
-  const bulkEditMutation = useMutation({
-    mutationFn: async (edits: any[]) => {
-      return importService.bulkEditCards(idNum, edits)
-    },
-    onSuccess: () => {
-      setSelectedCards(new Set())
-      setSelectedCardsData([])
-      // Invalidate all queries that start with ['import', 'batch', idNum, 'rows']
-      queryClient.invalidateQueries({ 
-        queryKey: ['import', 'batch', idNum, 'rows'],
-        exact: false 
-      })
-      // Also invalidate card types data
-      queryClient.invalidateQueries({ 
-        queryKey: ['import', 'batch', idNum, 'card-types'] 
-      })
-    },
-    onError: (e: any) => {
-      alert(`Bulk edit failed: ${e.message}`)
-    }
-  })
-
-  const mergeCardsMutation = useMutation({
-    mutationFn: async (request: any) => {
-      return importService.mergeCards(idNum, request)
-    },
-    onSuccess: () => {
-      setSelectedCards(new Set())
-      setSelectedCardsData([])
-      setShowMergeModal(false)
-      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'] })
-    },
-    onError: (e: any) => {
-      alert(`Merge cards failed: ${e.message}`)
-    }
-  })
-
-  const splitCardMutation = useMutation({
-    mutationFn: async (request: any) => {
-      return importService.splitCard(idNum, request)
-    },
-    onSuccess: () => {
-      setShowSplitModal(false)
-      setSplitCardRow(null)
-      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'] })
-    },
-    onError: (e: any) => {
-      alert(`Split card failed: ${e.message}`)
-    }
-  })
-
-  const deleteSectionMutation = useMutation({
-    mutationFn: async (cardType: string) => {
-      return importService.deleteCardSection(idNum, cardType)
-    },
-    onSuccess: (data) => {
-      setShowDeleteSectionConfirm(false)
-      setDeleteSectionCardType(null)
-      alert(`Successfully deleted ${data.deleted_count} cards from section`)
-      // Clear selected cards since they might have been deleted
-      setSelectedCards(new Set())
-      setSelectedCardsData([])
-      // Invalidate all related queries to refresh the UI
-      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'card-types'] })
-      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'], exact: false })
-      queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'groups'] })
-      // Force refetch to ensure immediate UI update
-      queryClient.refetchQueries({ queryKey: ['import', 'batch', idNum, 'card-types'] })
-    },
-    onError: (e: any) => {
-      alert(`Delete section failed: ${e.message}`)
     }
   })
 
@@ -1711,98 +1600,15 @@ export const ImportResolvePage = () => {
   const unresolved = unresolvedCount()
   const playerUnresolved = unresolvedByKind('player')
   const teamUnresolved = unresolvedByKind('team')
+  const parallelUnresolved = unresolvedByKind('parallel')
 
   const toggleSection = (cardType: string) => {
     setCollapsedSections(prev => ({
       ...prev,
-      [cardType]: !(prev[cardType] ?? true)
+      [cardType]: !(prev[cardType] ?? false)
     }))
   }
   
-  const updateCardTypeParallels = (cardType: string, parallels: ImportParallelRef[]) => {
-    setCardTypeParallels(prev => ({
-      ...prev,
-      [cardType]: parallels
-    }))
-    
-    // Apply these parallels to all cards of this type
-    // Note: This would require a separate API call to bulk update cards
-    // For now, we'll just update the local state
-  }
-
-  // Bulk action functions
-  const handleBulkToggle = (field: 'is_rookie' | 'is_first' | 'is_autograph', value: boolean) => {
-    if (selectedCards.size === 0) return
-    
-    const edits = Array.from(selectedCards).map(rowId => ({
-      row_id: rowId,
-      [field]: value
-    }))
-    
-    bulkEditMutation.mutate(edits)
-  }
-
-  const handleSelectAll = (rows: CardRow[], checked: boolean) => {
-    if (checked) {
-      setSelectedCards(prev => {
-        const newSelected = new Set(prev)
-        rows.forEach(row => newSelected.add(row.row_id))
-        return newSelected
-      })
-      setSelectedCardsData(prev => {
-        const existingIds = new Set(prev.map(card => card.row_id))
-        const newCards = rows.filter(row => !existingIds.has(row.row_id))
-        return [...prev, ...newCards]
-      })
-    } else {
-      setSelectedCards(prev => {
-        const newSelected = new Set(prev)
-        rows.forEach(row => newSelected.delete(row.row_id))
-        return newSelected
-      })
-      const rowIds = new Set(rows.map(row => row.row_id))
-      setSelectedCardsData(prev => prev.filter(card => !rowIds.has(card.row_id)))
-    }
-  }
-
-  const handleCardSelect = (rowId: number, checked: boolean, cardRow?: CardRow) => {
-    setSelectedCards(prev => {
-      const newSelected = new Set(prev)
-      if (checked) {
-        newSelected.add(rowId)
-      } else {
-        newSelected.delete(rowId)
-      }
-      return newSelected
-    })
-    
-    if (checked && cardRow) {
-      setSelectedCardsData(prev => {
-        const exists = prev.some(card => card.row_id === rowId)
-        return exists ? prev : [...prev, cardRow]
-      })
-    } else {
-      setSelectedCardsData(prev => prev.filter(card => card.row_id !== rowId))
-    }
-  }
-
-  const handleMergeCards = () => {
-    if (selectedCards.size < 2) {
-      alert('Please select at least 2 cards to merge')
-      return
-    }
-    setShowMergeModal(true)
-  }
-
-  const handleSplitCard = (row: CardRow) => {
-    setSplitCardRow(row)
-    setShowSplitModal(true)
-  }
-
-  const handleDeleteSection = (cardType: string) => {
-    setDeleteSectionCardType(cardType)
-    setShowDeleteSectionConfirm(true)
-  }
 
   return (
     <div className="dashboard-container">
@@ -1853,11 +1659,13 @@ export const ImportResolvePage = () => {
         <div style={{ marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Players: {playerUnresolved} unresolved</span>
           <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Teams: {teamUnresolved} unresolved</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Parallels: {parallelUnresolved} unresolved</span>
         </div>
+
 
         {/* Card Type Sections */}
         <div className="space-y-6">
-          {cardTypes.filter((cardTypeInfo: CardTypeInfo) => (cardTypeInfo.total_cards || 0) > 0).map((cardTypeInfo: CardTypeInfo, index: number) => (
+          {cardTypes.map((cardTypeInfo: CardTypeInfo, index: number) => (
             <CardTypeSection
               key={cardTypeInfo.card_type || `card-type-${index}`}
               batchId={idNum}
@@ -1866,21 +1674,15 @@ export const ImportResolvePage = () => {
               onCardEdit={setActiveRow}
               onParallelEdit={setParallelModalCardType}
               cardEdits={cardEdits}
-              isCollapsed={collapsedSections[cardTypeInfo.card_type] ?? true}
+              isCollapsed={collapsedSections[cardTypeInfo.card_type] ?? false}
               onToggleCollapse={() => toggleSection(cardTypeInfo.card_type)}
-              selectedCards={selectedCards}
-              onCardSelect={handleCardSelect}
-              onSelectAll={handleSelectAll}
-              onBulkToggle={handleBulkToggle}
-              onMergeCards={handleMergeCards}
-              onSplitCard={handleSplitCard}
-              bulkEditPending={bulkEditMutation.isPending}
-              mergeCardsPending={mergeCardsMutation.isPending}
-              onDeleteSection={handleDeleteSection}
-              deleteSectionPending={deleteSectionMutation.isPending}
+              onSaveResolutions={async () => {
+                await resolveMutation.mutateAsync()
+                queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'card-types'] })
+              }}
             />
           ))}
-          {cardTypes.filter((cardTypeInfo: CardTypeInfo) => (cardTypeInfo.total_cards || 0) > 0).length === 0 && (
+          {cardTypes.length === 0 && (
             <div className="text-sm text-gray-400 text-center py-20 border border-dashed border-gray-700 rounded-lg">
               No card types found in this batch.
             </div>
@@ -1930,99 +1732,20 @@ export const ImportResolvePage = () => {
           />
         )}
 
-        {/* Parallel Modal */}
+        {/* Parallel Resolution Modal */}
         {parallelModalCardType && (
-          <ParallelEditModal
+          <ParallelResolutionModal
             cardType={parallelModalCardType}
-            parallels={cardTypeParallels[parallelModalCardType] || []}
-            onSave={(parallels) => updateCardTypeParallels(parallelModalCardType, parallels)}
+            groups={groups}
+            onSave={async () => {
+              await resolveMutation.mutateAsync()
+              queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'card-types'] })
+            }}
             onClose={() => setParallelModalCardType(null)}
           />
         )}
 
-        {/* Merge Cards Modal */}
-        {showMergeModal && (
-          <MergeCardsModal
-            selectedCardIds={Array.from(selectedCards)}
-            selectedCards={selectedCardsData}
-            onClose={() => setShowMergeModal(false)}
-            onMerge={(request) => mergeCardsMutation.mutate(request)}
-            isPending={mergeCardsMutation.isPending}
-          />
-        )}
-
-        {/* Split Card Modal */}
-        {showSplitModal && splitCardRow && (
-          <SplitCardModal
-            cardRow={splitCardRow}
-            onClose={() => {
-              setShowSplitModal(false)
-              setSplitCardRow(null)
-            }}
-            onSplit={(request) => splitCardMutation.mutate(request)}
-            isPending={splitCardMutation.isPending}
-          />
-        )}
-
-        {/* Delete Section Confirmation Modal */}
-        {showDeleteSectionConfirm && deleteSectionCardType && (
-          <div className="modal-overlay" onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowDeleteSectionConfirm(false)
-              setDeleteSectionCardType(null)
-            }
-          }}>
-            <div className="modal-content">
-              <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: 'var(--text-primary)' }}>
-                Delete Card Section
-              </h2>
-              
-              <div style={{ marginBottom: '20px' }}>
-                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                  Are you sure you want to delete ALL cards in this section? This action cannot be undone.
-                </p>
-                
-                <div style={{ 
-                  padding: '12px', 
-                  backgroundColor: 'var(--bg-tertiary)', 
-                  borderRadius: '8px',
-                  fontSize: '13px'
-                }}>
-                  <div><strong>Card Type:</strong> {deleteSectionCardType}</div>
-                  <div style={{ color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                    All cards of this type will be permanently deleted
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                <button 
-                  onClick={() => {
-                    setShowDeleteSectionConfirm(false)
-                    setDeleteSectionCardType(null)
-                  }}
-                  className="btn-secondary"
-                  disabled={deleteSectionMutation.isPending}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => deleteSectionMutation.mutate(deleteSectionCardType)}
-                  className="btn-primary"
-                  disabled={deleteSectionMutation.isPending}
-                  style={{ 
-                    backgroundColor: '#dc2626',
-                    borderColor: '#dc2626'
-                  }}
-                >
-                  {deleteSectionMutation.isPending ? 'Deleting...' : 'Delete Section'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Delete Batch Confirmation Modal */}
+        {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
           <div className="modal-overlay" onClick={(e) => {
             if (e.target === e.currentTarget) {
