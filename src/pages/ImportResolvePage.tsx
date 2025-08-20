@@ -675,6 +675,491 @@ const ParallelEditModal = ({ cardType, parallels, onSave, onClose }: ParallelMod
   )
 }
 
+// Parallel Resolution Modal
+interface ParallelResolutionModalProps {
+  cardType: string
+  onClose: () => void
+  groups: any
+  onSaveResolutions: () => Promise<void>
+}
+
+const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions }: ParallelResolutionModalProps) => {
+  const { parallels, select, clear } = useImportResolutionStore()
+  
+  // Filter parallels for this card type
+  const cardTypeParallels = Object.entries(parallels).filter(([_, entry]) => entry.cardType === cardType)
+  const unresolvedParallels = cardTypeParallels.filter(([_, entry]) => !entry.selection)
+  const resolvedParallels = cardTypeParallels.filter(([_, entry]) => entry.selection)
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow
+    document.body.style.overflow = 'hidden'
+    
+    return () => {
+      document.body.style.overflow = originalStyle
+    }
+  }, [])
+
+  const autoResolveAll = () => {
+    const parallelCandidates = groups?.parallel_candidates || {}
+    let resolved = 0
+    
+    unresolvedParallels.forEach(([key, entry]) => {
+      // Candidates are grouped by card type, then filter by parallel name
+      const cardTypeCandidates = parallelCandidates[entry.cardType] || []
+      const candidates = cardTypeCandidates.filter((candidate: any) => 
+        candidate.parallel_name === entry.parallelName
+      )
+      
+      if (candidates.length > 0) {
+        const bestCandidate = candidates.slice().sort((a: any, b: any) => b.score - a.score)[0]
+        if (bestCandidate && bestCandidate.score >= 98) {
+          select('parallel', key, { 
+            kind: 'parallel', 
+            cardType: entry.cardType, 
+            parallelName: entry.parallelName, 
+            existingId: bestCandidate.id, 
+            canonical: bestCandidate.name 
+          })
+          resolved++
+        }
+      }
+    })
+    
+    return resolved
+  }
+
+  return (
+    <div className="card-edit-modal-backdrop" onClick={onClose}>
+      <div className="card-edit-modal-container" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="card-edit-modal-header">
+          <h2 className="card-edit-modal-title">
+            ⚡ Parallel Resolution - {cardType}
+          </h2>
+          <button onClick={onClose} className="card-edit-modal-close-button">
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="card-edit-modal-content" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          {/* Status Summary */}
+          <div style={{
+            padding: '12px',
+            backgroundColor: 'var(--bg-tertiary)',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+              <span style={{ fontWeight: '500' }}>{cardTypeParallels.length}</span> parallels total • 
+              <span style={{ color: '#059669', marginLeft: '8px' }}>{resolvedParallels.length} resolved</span> • 
+              <span style={{ color: '#d97706', marginLeft: '8px' }}>{unresolvedParallels.length} unresolved</span>
+            </div>
+            {unresolvedParallels.length > 0 && (
+              <button
+                onClick={autoResolveAll}
+                className="dashboard-card-button small gradient-blue"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+              >
+                🎯 Auto Resolve All
+              </button>
+            )}
+          </div>
+
+          {/* Unresolved Parallels */}
+          {unresolvedParallels.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ 
+                fontSize: '16px', 
+                fontWeight: '600', 
+                color: 'var(--text-primary)', 
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                ⚠️ Unresolved Parallels ({unresolvedParallels.length})
+              </h3>
+              
+              <div style={{ display: 'grid', gap: '16px' }}>
+                {unresolvedParallels.map(([key, entry]) => {
+                  // Candidates are grouped by card type, then filter by parallel name
+                  const cardTypeCandidates = groups?.parallel_candidates?.[entry.cardType] || []
+                  const candidates = cardTypeCandidates.filter((candidate: any) => 
+                    candidate.parallel_name === entry.parallelName
+                  )
+                  
+                  console.log('Parallel resolution debug:', {
+                    key,
+                    parallelName: entry.parallelName,
+                    cardType: entry.cardType,
+                    candidatesFound: candidates.length,
+                    availableCardTypes: Object.keys(groups?.parallel_candidates || {}),
+                    cardTypeCandidatesCount: cardTypeCandidates.length,
+                    candidates: candidates.slice(0, 3) // Show first 3 for debugging
+                  })
+                  
+                  return (
+                    <div key={key} style={{ 
+                      padding: '16px', 
+                      backgroundColor: 'var(--bg-card)', 
+                      border: '1px solid var(--border-primary)', 
+                      borderRadius: '8px' 
+                    }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        marginBottom: '12px' 
+                      }}>
+                        <div>
+                          <div style={{ 
+                            fontSize: '14px', 
+                            fontWeight: '500', 
+                            color: 'var(--text-primary)' 
+                          }}>
+                            {(() => {
+                              // Look for print run info in card type parallels or candidates
+                              const cardTypeParallels = groups?.parallels_by_card_type?.[entry.cardType] || []
+                              const parallelInfo = cardTypeParallels.find((p: any) => p.name === entry.parallelName)
+                              
+                              // Also check if any candidate has original_text info
+                              const firstCandidate = candidates[0]
+                              const originalText = firstCandidate?.original_text || parallelInfo?.original_print_run_text
+                              const printRun = parallelInfo?.print_run
+                              
+                              let displayName = entry.parallelName
+                              
+                              // Add print run to the name if available
+                              if (originalText) {
+                                // Use the original text which likely already has the format we want
+                                displayName = `${entry.parallelName} ${originalText}`
+                              } else if (printRun) {
+                                displayName = `${entry.parallelName} /${printRun}`
+                              }
+                              
+                              return displayName
+                            })()}
+                          </div>
+                        </div>
+                        <span style={{ 
+                          fontSize: '10px', 
+                          padding: '4px 8px', 
+                          borderRadius: '12px', 
+                          backgroundColor: '#d97706', 
+                          color: 'white', 
+                          fontWeight: '500' 
+                        }}>
+                          ⚠️ Unresolved
+                        </span>
+                      </div>
+                      
+                      {/* Candidates */}
+                      <div style={{ 
+                        display: 'flex', 
+                        flexWrap: 'wrap',
+                        gap: '8px', 
+                        marginBottom: '12px' 
+                      }}>
+                        {candidates.slice(0, 6).map((candidate: any) => {
+                          // Score-based styling per backend spec
+                          const score = candidate.score
+                          let scoreColor, scoreIcon, confidenceText
+                          
+                          if (score >= 90) {
+                            scoreColor = '#059669'  // Green - high confidence
+                            scoreIcon = '✅'
+                            confidenceText = 'High confidence'
+                          } else if (score >= 80) {
+                            scoreColor = '#d97706'  // Yellow - good match  
+                            scoreIcon = '⚠️'
+                            confidenceText = 'Good match'
+                          } else if (score >= 75) {
+                            scoreColor = '#f59e0b'  // Orange - review needed
+                            scoreIcon = '⚠️'
+                            confidenceText = 'Review needed'
+                          } else {
+                            scoreColor = '#dc2626'  // Red - low confidence
+                            scoreIcon = '❌'
+                            confidenceText = 'Low confidence'
+                          }
+                          
+                          // Check for print run conflicts
+                          const cardTypeParallels = groups?.parallels_by_card_type?.[entry.cardType] || []
+                          const parallelInfo = cardTypeParallels.find((p: any) => p.name === entry.parallelName)
+                          const importPrintRun = parallelInfo?.print_run
+                          const candidatePrintRun = candidate.print_run
+                          const printRunConflict = importPrintRun && candidatePrintRun && importPrintRun !== candidatePrintRun
+                          
+                          return (
+                            <button 
+                              key={candidate.id} 
+                              onClick={() => select('parallel', key, { 
+                                kind: 'parallel', 
+                                cardType: entry.cardType, 
+                                parallelName: entry.parallelName, 
+                                existingId: candidate.id, 
+                                canonical: candidate.name 
+                              })} 
+                              style={{
+                                padding: '8px 12px', 
+                                borderRadius: '6px', 
+                                fontSize: '11px', 
+                                border: `2px solid ${scoreColor}`,
+                                backgroundColor: 'var(--button-bg)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                position: 'relative',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'flex-start',
+                                whiteSpace: 'nowrap'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = scoreColor
+                                e.currentTarget.style.color = 'white'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--button-bg)'
+                                e.currentTarget.style.color = 'var(--text-primary)'
+                              }}
+                              title={`${confidenceText} - ${formatScore(score)}%`}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                                <span>{scoreIcon}</span>
+                                <span style={{ fontWeight: '500' }}>
+                                  {(() => {
+                                    // Format candidate name with print run inline
+                                    let displayName = candidate.name
+                                    
+                                    if (candidatePrintRun) {
+                                      displayName = `${candidate.name} /${candidatePrintRun}`
+                                      if (printRunConflict) {
+                                        displayName += ' ⚠️'
+                                      }
+                                    }
+                                    
+                                    return displayName
+                                  })()}
+                                </span>
+                                <span style={{ 
+                                  opacity: 0.7, 
+                                  marginLeft: 'auto',
+                                  fontSize: '10px',
+                                  fontWeight: '600'
+                                }}>
+                                  {formatScore(score)}%
+                                </span>
+                              </div>
+                              
+                              {/* Original text info if different from print run */}
+                              {candidate.original_text && candidate.original_text !== `/${candidatePrintRun}` && (
+                                <div style={{ 
+                                  fontSize: '10px', 
+                                  opacity: 0.7, 
+                                  marginTop: '4px',
+                                  fontStyle: 'italic'
+                                }}>
+                                  Original: "{candidate.original_text}"
+                                </div>
+                              )}
+                            </button>
+                          )
+                        })}
+                        {candidates.length === 0 && (
+                          <span style={{ 
+                            fontSize: '11px', 
+                            color: 'var(--text-secondary)', 
+                            fontStyle: 'italic' 
+                          }}>
+                            No candidates found
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button 
+                          onClick={() => select('parallel', key, { 
+                            kind: 'parallel', 
+                            cardType: entry.cardType, 
+                            parallelName: entry.parallelName, 
+                            create: entry.parallelName 
+                          })} 
+                          style={{
+                            fontSize: '11px', 
+                            padding: '8px 12px', 
+                            borderRadius: '6px', 
+                            backgroundColor: '#2563eb', 
+                            color: 'white',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                        >
+                          🆕 Create New
+                        </button>
+                        {candidates.length > 0 && (
+                          <button 
+                            onClick={() => {
+                              const bestCandidate = candidates
+                                .slice()
+                                .sort((a: any, b: any) => b.score - a.score)[0]
+                              if (bestCandidate && bestCandidate.score >= 75) {
+                                select('parallel', key, { 
+                                  kind: 'parallel', 
+                                  cardType: entry.cardType, 
+                                  parallelName: entry.parallelName, 
+                                  existingId: bestCandidate.id, 
+                                  canonical: bestCandidate.name 
+                                })
+                              }
+                            }}
+                            disabled={candidates.length === 0 || candidates[0]?.score < 75}
+                            style={{
+                              fontSize: '11px', 
+                              padding: '8px 12px', 
+                              borderRadius: '6px', 
+                              backgroundColor: candidates.length > 0 && candidates[0]?.score >= 75 ? '#059669' : 'var(--button-bg)', 
+                              color: candidates.length > 0 && candidates[0]?.score >= 75 ? 'white' : 'var(--text-tertiary)',
+                              border: '1px solid var(--border-secondary)',
+                              cursor: candidates.length > 0 && candidates[0]?.score >= 75 ? 'pointer' : 'not-allowed',
+                              opacity: candidates.length > 0 && candidates[0]?.score >= 75 ? 1 : 0.6
+                            }}
+                            title={`Auto-select best match (${candidates[0] ? formatScore(candidates[0].score) : 'N/A'}%)`}
+                          >
+                            ✨ Best Match
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Resolved Parallels */}
+          {resolvedParallels.length > 0 && (
+            <div>
+              <h3 style={{ 
+                fontSize: '16px', 
+                fontWeight: '600', 
+                color: 'var(--text-primary)', 
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                ✅ Resolved Parallels ({resolvedParallels.length})
+              </h3>
+              
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {resolvedParallels.map(([key, entry]) => (
+                  <div key={key} style={{ 
+                    padding: '12px', 
+                    backgroundColor: 'var(--bg-tertiary)', 
+                    border: '1px solid var(--border-secondary)', 
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>
+                        {entry.parallelName}
+                      </div>
+                      {entry.selection && 'canonical' in entry.selection && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          → {entry.selection.canonical}
+                        </div>
+                      )}
+                      {entry.selection && 'create' in entry.selection && (
+                        <div style={{ fontSize: '11px', color: '#2563eb' }}>
+                          → Create: {entry.selection.create}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span style={{ 
+                        fontSize: '10px', 
+                        padding: '4px 8px', 
+                        borderRadius: '12px', 
+                        backgroundColor: '#059669', 
+                        color: 'white', 
+                        fontWeight: '500' 
+                      }}>
+                        ✅ Resolved
+                      </span>
+                      <button
+                        onClick={() => clear('parallel', key)}
+                        style={{
+                          fontSize: '11px',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: 'var(--button-bg)',
+                          border: '1px solid var(--border-secondary)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                        title="Clear resolution"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {cardTypeParallels.length === 0 && (
+            <div style={{ 
+              textAlign: 'center', 
+              color: 'var(--text-secondary)', 
+              fontSize: '14px',
+              fontStyle: 'italic',
+              padding: '40px 20px'
+            }}>
+              No parallels found for "{cardType}" card type.
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="card-edit-modal-footer">
+          <button
+            onClick={onClose}
+            className="card-edit-modal-cancel-button"
+          >
+            Close
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await onSaveResolutions()
+                onClose()
+              } catch (error) {
+                console.error('Failed to save resolutions:', error)
+              }
+            }}
+            className="card-edit-modal-save-button"
+            disabled={resolvedParallels.filter(([_, entry]) => entry.dirty).length === 0}
+          >
+            💾 Apply Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Card Type Section Component - Handles one card type with pagination
 interface CardTypeSectionProps {
   batchId: number
@@ -682,6 +1167,7 @@ interface CardTypeSectionProps {
   groups: any
   onCardEdit: (row: CardRow) => void
   onParallelEdit: (cardType: string) => void
+  onParallelResolve: (cardType: string) => void
   cardEdits: Record<number, CardEditPayload>
   isCollapsed: boolean
   onToggleCollapse: () => void
@@ -702,6 +1188,7 @@ const CardTypeSection = ({
   groups, 
   onCardEdit, 
   onParallelEdit,
+  onParallelResolve,
   cardEdits,
   isCollapsed,
   onToggleCollapse,
@@ -917,10 +1404,17 @@ const CardTypeSection = ({
         </div>
         <div className="collapsible-card-actions">
           <button
-            onClick={() => onParallelEdit(cardType)}
+            onClick={() => onParallelResolve(cardType)}
             className="dashboard-card-button small gradient-indigo"
           >
-            ⚡ Parallels
+            ⚡ Resolve Parallels
+          </button>
+          <button
+            onClick={() => onParallelEdit(cardType)}
+            className="dashboard-card-button small gradient-indigo"
+            style={{ opacity: 0.8, fontSize: '11px' }}
+          >
+            ✏️ Edit Parallels
           </button>
           <button
             onClick={autoResolveSection}
@@ -1232,10 +1726,11 @@ export const ImportResolvePage = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const idNum = Number(batchId)
-  const { initialize, unresolvedCount, buildResolveRequest, setErrors, unresolvedByKind, cardEdits, setCardEdit, removeCardEdit } = useImportResolutionStore()
+  const { initialize, unresolvedCount, buildResolveRequest, setErrors, unresolvedByKind, cardEdits, setCardEdit, removeCardEdit, parallels, select, clear } = useImportResolutionStore()
   const [activeRow, setActiveRow] = useState<CardRow | null>(null)
   const [cardTypeParallels, setCardTypeParallels] = useState<Record<string, ImportParallelRef[]>>({})
   const [parallelModalCardType, setParallelModalCardType] = useState<string | null>(null)
+  const [parallelResolutionModal, setParallelResolutionModal] = useState<string | null>(null) // cardType for parallel resolution modal
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
@@ -1348,9 +1843,56 @@ export const ImportResolvePage = () => {
 
   useEffect(() => {
     if (groupsQuery.data) {
-      initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names)
+      // Extract parallel names for resolution
+      const parallels: { cardType: string; parallelName: string }[] = []
+      
+      // Handle new grouped structure
+      const groupedData = groupsQuery.data as any
+      if (groupedData.parallel_groups) {
+        Object.entries(groupedData.parallel_groups).forEach(([cardType, parallelList]) => {
+          (parallelList as any[]).forEach((parallel: any) => {
+            parallels.push({ cardType, parallelName: parallel.name })
+          })
+        })
+      }
+      
+      // Handle legacy structure
+      else if (groupedData.parallels_by_card_type) {
+        Object.entries(groupedData.parallels_by_card_type).forEach(([cardType, parallelList]) => {
+          (parallelList as any[]).forEach((parallel: any) => {
+            parallels.push({ cardType, parallelName: parallel.name })
+          })
+        })
+      }
+      
+      // Handle card types structure from cardTypesQuery fallback
+      if (cardTypesQuery.data?.card_types) {
+        cardTypesQuery.data.card_types.forEach((ct: CardTypeInfo) => {
+          (ct.parallels || []).forEach((parallel) => {
+            parallels.push({ cardType: ct.card_type, parallelName: parallel.name })
+          })
+        })
+      }
+      
+      // Extract parallel names from parallel_candidates if available
+      if (groupedData.parallel_candidates) {
+        Object.entries(groupedData.parallel_candidates).forEach(([cardType, candidateList]) => {
+          // Get unique parallel names from candidates
+          const uniqueParallelNames = new Set()
+          ;(candidateList as any[]).forEach((candidate: any) => {
+            if (candidate.parallel_name && !uniqueParallelNames.has(candidate.parallel_name)) {
+              uniqueParallelNames.add(candidate.parallel_name)
+              parallels.push({ cardType, parallelName: candidate.parallel_name })
+            }
+          })
+        })
+      }
+      
+      console.log('Initialized parallels for resolution:', parallels)
+      
+      initialize(idNum, groupsQuery.data.player_names, groupsQuery.data.team_names, parallels)
     }
-  }, [groupsQuery.data, idNum, initialize])
+  }, [groupsQuery.data, cardTypesQuery.data, idNum, initialize])
 
   // Initialize card type parallels from the new card types endpoint
   useEffect(() => {
@@ -1399,15 +1941,17 @@ export const ImportResolvePage = () => {
   const resolveMutation = useMutation({
     mutationFn: async () => { 
       const body = buildResolveRequest()
-      if (!body.players && !body.teams && !body.card_edits) throw new Error('No pending changes')
+      if (!body.players && !body.teams && !body.parallels && !body.card_edits) throw new Error('No pending changes')
       return importService.resolve(idNum, body) 
     },
     onSuccess: () => { 
-      const { players, teams } = useImportResolutionStore.getState()
+      const { players, teams, parallels } = useImportResolutionStore.getState()
       const dirtyPlayers = Object.values(players).filter(p=>p.dirty).map(p=>p.raw)
       const dirtyTeams = Object.values(teams).filter(t=>t.dirty).map(t=>t.raw)
+      const dirtyParallels = Object.values(parallels).filter(p=>p.dirty).map(p=>p.key)
       useImportResolutionStore.getState().markClean('player', dirtyPlayers)
       useImportResolutionStore.getState().markClean('team', dirtyTeams)
+      useImportResolutionStore.getState().markClean('parallel', dirtyParallels)
       // Invalidate all row queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'rows'] })
     }
@@ -1462,6 +2006,7 @@ export const ImportResolvePage = () => {
   const unresolved = unresolvedCount()
   const playerUnresolved = unresolvedByKind('player')
   const teamUnresolved = unresolvedByKind('team')
+  const parallelUnresolved = unresolvedByKind('parallel')
 
   const toggleSection = (cardType: string) => {
     setCollapsedSections(prev => ({
@@ -1530,6 +2075,7 @@ export const ImportResolvePage = () => {
         <div style={{ marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Players: {playerUnresolved} unresolved</span>
           <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Teams: {teamUnresolved} unresolved</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Parallels: {parallelUnresolved} unresolved</span>
           {getSelectedCount() > 0 && (
             <>
               <span style={{ color: 'var(--text-primary)', fontSize: '14px', fontWeight: '500' }}>
@@ -1563,6 +2109,7 @@ export const ImportResolvePage = () => {
               groups={groups}
               onCardEdit={setActiveRow}
               onParallelEdit={setParallelModalCardType}
+              onParallelResolve={setParallelResolutionModal}
               cardEdits={cardEdits}
               isCollapsed={collapsedSections[cardTypeInfo.card_type] ?? false}
               onToggleCollapse={() => toggleSection(cardTypeInfo.card_type)}
@@ -1629,13 +2176,26 @@ export const ImportResolvePage = () => {
           />
         )}
 
-        {/* Parallel Modal */}
+        {/* Parallel Edit Modal */}
         {parallelModalCardType && (
           <ParallelEditModal
             cardType={parallelModalCardType}
             parallels={cardTypeParallels[parallelModalCardType] || []}
             onSave={(parallels) => updateCardTypeParallels(parallelModalCardType, parallels)}
             onClose={() => setParallelModalCardType(null)}
+          />
+        )}
+
+        {/* Parallel Resolution Modal */}
+        {parallelResolutionModal && (
+          <ParallelResolutionModal
+            cardType={parallelResolutionModal}
+            groups={groups}
+            onSaveResolutions={async () => {
+              await resolveMutation.mutateAsync()
+              queryClient.invalidateQueries({ queryKey: ['import', 'batch', idNum, 'card-types'] })
+            }}
+            onClose={() => setParallelResolutionModal(null)}
           />
         )}
 
