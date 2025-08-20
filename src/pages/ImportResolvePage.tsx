@@ -690,6 +690,15 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
   const cardTypeParallels = Object.entries(parallels).filter(([_, entry]) => entry.cardType === cardType)
   const unresolvedParallels = cardTypeParallels.filter(([_, entry]) => !entry.selection)
   const resolvedParallels = cardTypeParallels.filter(([_, entry]) => entry.selection)
+  
+  // State for search functionality
+  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({})
+  const [searchResults, setSearchResults] = useState<Record<string, any[]>>({})
+  const [isSearching, setIsSearching] = useState<Record<string, boolean>>({})
+  
+  // State for inline editing
+  const [editingParallels, setEditingParallels] = useState<Record<string, { name: string; printRun: string }>>({})
+  const [showEditForm, setShowEditForm] = useState<Record<string, boolean>>({})
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -700,6 +709,120 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
       document.body.style.overflow = originalStyle
     }
   }, [])
+
+  // Search for parallel candidates
+  const searchParallelCandidates = async (key: string, query: string) => {
+    if (!query.trim()) {
+      setSearchResults(prev => ({ ...prev, [key]: [] }))
+      return
+    }
+
+    setIsSearching(prev => ({ ...prev, [key]: true }))
+    
+    try {
+      // Use the same API pattern as the rest of the app
+      const { apiRequestJson } = await import('../utils/api')
+      const params = new URLSearchParams({ query })
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const candidates = await apiRequestJson(`${baseUrl}/admin/imports/search-parallel-candidates?${params}`, {
+        method: 'GET'
+      })
+      
+      setSearchResults(prev => ({ ...prev, [key]: candidates as any[] }))
+    } catch (error) {
+      console.error('Search error:', error)
+      setSearchResults(prev => ({ ...prev, [key]: [] }))
+    } finally {
+      setIsSearching(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
+  // Debounced search effect
+  useEffect(() => {
+    const timeouts: Record<string, number> = {}
+    
+    Object.entries(searchQueries).forEach(([key, query]) => {
+      if (query.trim()) {
+        timeouts[key] = setTimeout(() => {
+          searchParallelCandidates(key, query)
+        }, 500) as unknown as number
+      }
+    })
+    
+    return () => {
+      Object.values(timeouts).forEach(timeout => clearTimeout(timeout))
+    }
+  }, [searchQueries])
+
+  // Initialize editing values for a parallel
+  const startEditing = (key: string, entry: any) => {
+    // If we already have editing values for this key, use them instead of reinitializing
+    if (editingParallels[key]) {
+      setShowEditForm(prev => ({ ...prev, [key]: true }))
+      return
+    }
+    
+    // Get original parallel data from multiple sources
+    const cardTypeParallels = groups?.parallels_by_card_type?.[entry.cardType] || []
+    const parallelInfo = cardTypeParallels.find((p: any) => p.name === entry.parallelName)
+    
+    // Also check candidates for print run info
+    const cardTypeCandidates = groups?.parallel_candidates?.[entry.cardType] || []
+    const candidates = cardTypeCandidates.filter((candidate: any) => 
+      candidate.parallel_name === entry.parallelName
+    )
+    const firstCandidate = candidates[0]
+    
+    // Try to get print run from various sources
+    let printRun = ''
+    if (parallelInfo?.print_run) {
+      printRun = parallelInfo.print_run.toString()
+    } else if (firstCandidate?.print_run) {
+      printRun = firstCandidate.print_run.toString()
+    } else if (parallelInfo?.original_print_run_text) {
+      // Extract number from text like "/499" or "499"
+      const match = parallelInfo.original_print_run_text.match(/\d+/)
+      if (match) {
+        printRun = match[0]
+      }
+    } else if (firstCandidate?.original_text) {
+      // Extract number from original text
+      const match = firstCandidate.original_text.match(/\d+/)
+      if (match) {
+        printRun = match[0]
+      }
+    }
+    
+    setEditingParallels(prev => ({
+      ...prev,
+      [key]: {
+        name: entry.parallelName,
+        printRun: printRun
+      }
+    }))
+    setShowEditForm(prev => ({ ...prev, [key]: true }))
+  }
+
+  // Cancel editing
+  const cancelEditing = (key: string) => {
+    setEditingParallels(prev => {
+      const newState = { ...prev }
+      delete newState[key]
+      return newState
+    })
+    setShowEditForm(prev => ({ ...prev, [key]: false }))
+  }
+
+  // Save edited parallel
+  const saveEditedParallel = (key: string) => {
+    // Keep the edited values and just close the form
+    // The editingParallels state will persist the changes
+    console.log('Saving edited parallel:', editingParallels[key])
+    setShowEditForm(prev => ({ ...prev, [key]: false }))
+    
+    // In a full implementation, you'd call an API to update the backend
+    // await updateParallelMutation.mutateAsync({ key, ...editingParallels[key] })
+  }
 
   const autoResolveAll = () => {
     const parallelCandidates = groups?.parallel_candidates || {}
@@ -715,12 +838,15 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
       if (candidates.length > 0) {
         const bestCandidate = candidates.slice().sort((a: any, b: any) => b.score - a.score)[0]
         if (bestCandidate && bestCandidate.score >= 98) {
+          const canonicalName = bestCandidate.print_run 
+            ? `${bestCandidate.name} /${bestCandidate.print_run}`
+            : bestCandidate.name
           select('parallel', key, { 
             kind: 'parallel', 
             cardType: entry.cardType, 
             parallelName: entry.parallelName, 
             existingId: bestCandidate.id, 
-            canonical: bestCandidate.name 
+            canonical: canonicalName 
           })
           resolved++
         }
@@ -813,39 +939,136 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
                     }}>
                       <div style={{ 
                         display: 'flex', 
-                        alignItems: 'center', 
+                        alignItems: 'flex-start', 
                         justifyContent: 'space-between', 
                         marginBottom: '12px' 
                       }}>
-                        <div>
-                          <div style={{ 
-                            fontSize: '14px', 
-                            fontWeight: '500', 
-                            color: 'var(--text-primary)' 
-                          }}>
-                            {(() => {
-                              // Look for print run info in card type parallels or candidates
-                              const cardTypeParallels = groups?.parallels_by_card_type?.[entry.cardType] || []
-                              const parallelInfo = cardTypeParallels.find((p: any) => p.name === entry.parallelName)
-                              
-                              // Also check if any candidate has original_text info
-                              const firstCandidate = candidates[0]
-                              const originalText = firstCandidate?.original_text || parallelInfo?.original_print_run_text
-                              const printRun = parallelInfo?.print_run
-                              
-                              let displayName = entry.parallelName
-                              
-                              // Add print run to the name if available
-                              if (originalText) {
-                                // Use the original text which likely already has the format we want
-                                displayName = `${entry.parallelName} ${originalText}`
-                              } else if (printRun) {
-                                displayName = `${entry.parallelName} /${printRun}`
-                              }
-                              
-                              return displayName
-                            })()}
-                          </div>
+                        <div style={{ flex: 1 }}>
+                          {!showEditForm[key] ? (
+                            // Display mode
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ 
+                                fontSize: '14px', 
+                                fontWeight: '500', 
+                                color: 'var(--text-primary)' 
+                              }}>
+                                {(() => {
+                                  // Use edited values if available, otherwise use original
+                                  const displayName = editingParallels[key]?.name || entry.parallelName
+                                  const displayPrintRun = editingParallels[key]?.printRun
+                                  
+                                  if (displayPrintRun) {
+                                    return `${displayName} /${displayPrintRun}`
+                                  }
+                                  
+                                  // Look for original print run info
+                                  const cardTypeParallels = groups?.parallels_by_card_type?.[entry.cardType] || []
+                                  const parallelInfo = cardTypeParallels.find((p: any) => p.name === entry.parallelName)
+                                  const firstCandidate = candidates[0]
+                                  const originalText = firstCandidate?.original_text || parallelInfo?.original_print_run_text
+                                  const printRun = parallelInfo?.print_run
+                                  
+                                  if (originalText) {
+                                    return `${displayName} ${originalText}`
+                                  } else if (printRun) {
+                                    return `${displayName} /${printRun}`
+                                  }
+                                  
+                                  return displayName
+                                })()}
+                              </div>
+                              <button
+                                onClick={() => startEditing(key, entry)}
+                                style={{
+                                  padding: '4px 6px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-secondary)',
+                                  backgroundColor: 'var(--button-bg)',
+                                  color: 'var(--text-secondary)',
+                                  cursor: 'pointer',
+                                  fontSize: '10px',
+                                  transition: 'all 0.2s'
+                                }}
+                                title="Edit parallel name and print run"
+                              >
+                                ✏️ Edit
+                              </button>
+                            </div>
+                          ) : (
+                            // Edit mode
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                  type="text"
+                                  value={editingParallels[key]?.name || ''}
+                                  onChange={(e) => setEditingParallels(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], name: e.target.value }
+                                  }))}
+                                  placeholder="Parallel name"
+                                  style={{
+                                    flex: 1,
+                                    padding: '6px 8px',
+                                    border: '1px solid var(--border-secondary)',
+                                    borderRadius: '4px',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '12px'
+                                  }}
+                                />
+                                <span style={{ color: 'var(--text-secondary)' }}>/</span>
+                                <input
+                                  type="text"
+                                  value={editingParallels[key]?.printRun || ''}
+                                  onChange={(e) => setEditingParallels(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], printRun: e.target.value }
+                                  }))}
+                                  placeholder="Print run"
+                                  style={{
+                                    width: '80px',
+                                    padding: '6px 8px',
+                                    border: '1px solid var(--border-secondary)',
+                                    borderRadius: '4px',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '12px'
+                                  }}
+                                />
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  onClick={() => saveEditedParallel(key)}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: 'none',
+                                    backgroundColor: '#059669',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontSize: '10px',
+                                    fontWeight: '500'
+                                  }}
+                                >
+                                  ✅ Save
+                                </button>
+                                <button
+                                  onClick={() => cancelEditing(key)}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-secondary)',
+                                    backgroundColor: 'var(--button-bg)',
+                                    color: 'var(--text-secondary)',
+                                    cursor: 'pointer',
+                                    fontSize: '10px'
+                                  }}
+                                >
+                                  ✕ Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <span style={{ 
                           fontSize: '10px', 
@@ -853,19 +1076,115 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
                           borderRadius: '12px', 
                           backgroundColor: '#d97706', 
                           color: 'white', 
-                          fontWeight: '500' 
+                          fontWeight: '500',
+                          marginLeft: '8px'
                         }}>
                           ⚠️ Unresolved
                         </span>
                       </div>
                       
-                      {/* Candidates */}
-                      <div style={{ 
-                        display: 'flex', 
-                        flexWrap: 'wrap',
-                        gap: '8px', 
-                        marginBottom: '12px' 
-                      }}>
+                      {/* Search Input */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type="text"
+                            placeholder="🔍 Search for better matches..."
+                            value={searchQueries[key] || ''}
+                            onChange={(e) => setSearchQueries(prev => ({ ...prev, [key]: e.target.value }))}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              paddingRight: isSearching[key] ? '40px' : '12px',
+                              border: '1px solid var(--border-secondary)',
+                              borderRadius: '6px',
+                              backgroundColor: 'var(--bg-tertiary)',
+                              color: 'var(--text-primary)',
+                              fontSize: '12px'
+                            }}
+                          />
+                          {isSearching[key] && (
+                            <div style={{
+                              position: 'absolute',
+                              right: '8px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '16px',
+                              height: '16px',
+                              border: '2px solid var(--border-secondary)',
+                              borderTop: '2px solid var(--text-primary)',
+                              borderRadius: '50%',
+                              animation: 'spin 1s linear infinite'
+                            }} />
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Search Results */}
+                      {searchResults[key] && searchResults[key].length > 0 && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '6px' }}>
+                            🔍 Search Results:
+                          </div>
+                          <div style={{ 
+                            display: 'flex', 
+                            flexWrap: 'wrap',
+                            gap: '6px', 
+                            marginBottom: '8px' 
+                          }}>
+                            {searchResults[key].slice(0, 4).map((candidate: any) => {
+                              const scoreColor = candidate.score >= 90 ? '#059669' : 
+                                               candidate.score >= 75 ? '#d97706' : '#dc2626'
+                              const scoreIcon = candidate.score >= 90 ? '✅' : 
+                                              candidate.score >= 75 ? '⚠️' : '❌'
+                              
+                              return (
+                                <button 
+                                  key={candidate.id} 
+                                  onClick={() => {
+                                    const canonicalName = candidate.print_run 
+                                      ? `${candidate.name} /${candidate.print_run}`
+                                      : candidate.name
+                                    select('parallel', key, { 
+                                      kind: 'parallel', 
+                                      cardType: entry.cardType, 
+                                      parallelName: entry.parallelName, 
+                                      existingId: candidate.id, 
+                                      canonical: canonicalName 
+                                    })
+                                  }} 
+                                  style={{
+                                    padding: '6px 10px', 
+                                    borderRadius: '4px', 
+                                    fontSize: '10px', 
+                                    border: `2px solid ${scoreColor}`,
+                                    backgroundColor: 'var(--button-bg)',
+                                    color: 'var(--text-primary)',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={`${candidate.name} - ${formatScore(candidate.score)}%`}
+                                >
+                                  {scoreIcon} {candidate.name}{candidate.print_run ? ` /${candidate.print_run}` : ''}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Original Candidates */}
+                      <div>
+                        {candidates.length > 0 && (
+                          <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '6px' }}>
+                            💡 Suggested Matches:
+                          </div>
+                        )}
+                        <div style={{ 
+                          display: 'flex', 
+                          flexWrap: 'wrap',
+                          gap: '8px', 
+                          marginBottom: '12px' 
+                        }}>
                         {candidates.slice(0, 6).map((candidate: any) => {
                           // Score-based styling per backend spec
                           const score = candidate.score
@@ -899,13 +1218,18 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
                           return (
                             <button 
                               key={candidate.id} 
-                              onClick={() => select('parallel', key, { 
-                                kind: 'parallel', 
-                                cardType: entry.cardType, 
-                                parallelName: entry.parallelName, 
-                                existingId: candidate.id, 
-                                canonical: candidate.name 
-                              })} 
+                              onClick={() => {
+                                const canonicalName = candidate.print_run 
+                                  ? `${candidate.name} /${candidate.print_run}`
+                                  : candidate.name
+                                select('parallel', key, { 
+                                  kind: 'parallel', 
+                                  cardType: entry.cardType, 
+                                  parallelName: entry.parallelName, 
+                                  existingId: candidate.id, 
+                                  canonical: canonicalName 
+                                })
+                              }} 
                               style={{
                                 padding: '8px 12px', 
                                 borderRadius: '6px', 
@@ -972,26 +1296,32 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
                             </button>
                           )
                         })}
-                        {candidates.length === 0 && (
+                        {candidates.length === 0 && searchResults[key]?.length === 0 && (
                           <span style={{ 
                             fontSize: '11px', 
                             color: 'var(--text-secondary)', 
                             fontStyle: 'italic' 
                           }}>
-                            No candidates found
+                            No matches found
                           </span>
                         )}
+                        </div>
                       </div>
                       
                       {/* Action Buttons */}
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <button 
-                          onClick={() => select('parallel', key, { 
-                            kind: 'parallel', 
-                            cardType: entry.cardType, 
-                            parallelName: entry.parallelName, 
-                            create: entry.parallelName 
-                          })} 
+                          onClick={() => {
+                            // Use edited name if available, otherwise use original
+                            const nameToCreate = editingParallels[key]?.name || entry.parallelName
+                            
+                            select('parallel', key, { 
+                              kind: 'parallel', 
+                              cardType: entry.cardType, 
+                              parallelName: entry.parallelName, 
+                              create: nameToCreate 
+                            })
+                          }} 
                           style={{
                             fontSize: '11px', 
                             padding: '8px 12px', 
@@ -1002,6 +1332,7 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
                             cursor: 'pointer',
                             fontWeight: '500'
                           }}
+                          title={editingParallels[key]?.name ? `Create new parallel: "${editingParallels[key].name}"` : `Create new parallel: "${entry.parallelName}"`}
                         >
                           🆕 Create New
                         </button>
@@ -1012,12 +1343,15 @@ const ParallelResolutionModal = ({ cardType, onClose, groups, onSaveResolutions 
                                 .slice()
                                 .sort((a: any, b: any) => b.score - a.score)[0]
                               if (bestCandidate && bestCandidate.score >= 75) {
+                                const canonicalName = bestCandidate.print_run 
+                                  ? `${bestCandidate.name} /${bestCandidate.print_run}`
+                                  : bestCandidate.name
                                 select('parallel', key, { 
                                   kind: 'parallel', 
                                   cardType: entry.cardType, 
                                   parallelName: entry.parallelName, 
                                   existingId: bestCandidate.id, 
-                                  canonical: bestCandidate.name 
+                                  canonical: canonicalName 
                                 })
                               }
                             }}
@@ -1187,7 +1521,6 @@ const CardTypeSection = ({
   cardTypeInfo, 
   groups, 
   onCardEdit, 
-  onParallelEdit,
   onParallelResolve,
   cardEdits,
   isCollapsed,
@@ -1407,14 +1740,7 @@ const CardTypeSection = ({
             onClick={() => onParallelResolve(cardType)}
             className="dashboard-card-button small gradient-indigo"
           >
-            ⚡ Resolve Parallels
-          </button>
-          <button
-            onClick={() => onParallelEdit(cardType)}
-            className="dashboard-card-button small gradient-indigo"
-            style={{ opacity: 0.8, fontSize: '11px' }}
-          >
-            ✏️ Edit Parallels
+            ⚡ Parallels
           </button>
           <button
             onClick={autoResolveSection}
@@ -1726,7 +2052,7 @@ export const ImportResolvePage = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const idNum = Number(batchId)
-  const { initialize, unresolvedCount, buildResolveRequest, setErrors, unresolvedByKind, cardEdits, setCardEdit, removeCardEdit, parallels, select, clear } = useImportResolutionStore()
+  const { initialize, unresolvedCount, buildResolveRequest, setErrors, unresolvedByKind, cardEdits, setCardEdit, removeCardEdit } = useImportResolutionStore()
   const [activeRow, setActiveRow] = useState<CardRow | null>(null)
   const [cardTypeParallels, setCardTypeParallels] = useState<Record<string, ImportParallelRef[]>>({})
   const [parallelModalCardType, setParallelModalCardType] = useState<string | null>(null)
